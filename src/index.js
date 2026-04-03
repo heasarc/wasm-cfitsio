@@ -39,6 +39,10 @@ export class FitsFile {
     
     readKeyword(keyword) { return this.fits.readKeyword(keyword); }
     readHeader() { return this.fits.readHeader(); }
+
+    hasWCS() { return this.fits.initWCS(); }
+    pixToWorld(x, y) { return this.fits.pixToWorld(Number(x), Number(y)); }
+    worldToPix(ra, dec) { return this.fits.worldToPix(Number(ra), Number(dec)); }
     
     readImage() { 
         const result = this.fits.readImage();

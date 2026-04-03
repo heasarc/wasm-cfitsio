@@ -11,6 +11,16 @@ export interface ColumnResult {
     data: Uint8Array | Int16Array | Int32Array | BigInt64Array | Float32Array | Float64Array | string[];
 }
 
+export interface WCSParams {
+    xrval: number; yrval: number;
+    xrpix: number; yrpix: number;
+    xinc: number;  yinc: number;
+    rot: number;   type: string;
+}
+
+export interface WorldCoords { ra: number; dec: number; }
+export interface PixelCoords { x: number; y: number; }
+
 export class FitsFile {
     /**
      * Initializes the WebAssembly module and opens the FITS file from memory.
@@ -50,6 +60,15 @@ export class FitsFile {
 
     /** Updates or adds a numeric keyword to the current header */
     updateKeyDouble(key: string, value: number, comment?: string): number;
+
+    /** Checks if the current HDU has valid WCSLIB coordinate data */
+    hasWCS(): boolean;
+
+    /** Converts Pixel coordinates (X, Y) to Sky coordinates (RA, Dec) */
+    pixToWorld(x: number, y: number): WorldCoords | null;
+
+    /** Converts Sky coordinates (RA, Dec) to Pixel coordinates (X, Y) */
+    worldToPix(ra: number, dec: number): PixelCoords | null;
 
     /** Flushes any modifications to memory and returns the updated FITS file bytes */
     save(): Uint8Array;

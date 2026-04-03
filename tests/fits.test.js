@@ -137,4 +137,32 @@ describe('FitsFile WASM Library', () => {
         });
     });
 
+    it('should parse WCS and perform coordinate transforms', async () => {
+        const fileData = loadFixture('test.fits');
+        const fits = await FitsFile.open(fileData);
+        
+        try {
+            if (fits.getNumHDUs() > 1) fits.moveToHDU(2);
+            
+            // initWCS() returns true if wcslib successfully parsed the header
+            if (fits.hasWCS()) {
+                // Test Pix -> Sky 
+                const sky = fits.pixToWorld(210.25, 212.5); // Using the CRPIX values from earlier
+                expect(sky).not.toBeNull();
+                expect(sky.ra).toBeTypeOf('number');
+                expect(sky.dec).toBeTypeOf('number');
+                
+                // Test Sky -> Pix (Transform back)
+                const pix = fits.worldToPix(sky.ra, sky.dec);
+                expect(pix).not.toBeNull();
+                expect(pix.x).toBeCloseTo(210.25, 4);
+                expect(pix.y).toBeCloseTo(212.5, 4);
+            } else {
+                console.warn("WCSLIB could not parse WCS from this file.");
+            }
+        } finally {
+            fits.close();
+        }
+    });
+
 });

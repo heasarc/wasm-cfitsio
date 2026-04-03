@@ -4,6 +4,7 @@
 #include <emscripten/bind.h>
 #include <emscripten/val.h>
 #include "fitsio.h"
+#include "wcslib.h"
 
 using namespace emscripten;
 
@@ -19,6 +20,10 @@ private:
     std::vector<int64_t> img64;
     std::vector<float> imgF32;
     std::vector<double> imgF64;
+
+    struct wcsprm* wcs;
+    int nreject;
+    int nwcs;
 
     // Helper to free memory before reading a new image
     void clearImageVectors() {
@@ -40,10 +45,20 @@ private:
         imgF64.clear(); imgF64.shrink_to_fit();
     }
 
+    // Helper to free WCS memory
+    void freeWCS() {
+        if (wcs != nullptr) {
+            wcsvfree(&nwcs, &wcs);
+            wcs = nullptr;
+        }
+    }
+
 public:
     FitsWrapper(std::string filename) {
         fptr = nullptr;
         status = 0;
+        wcs = nullptr;
+        nwcs = 0;
         fits_open_file(&fptr, filename.c_str(), READWRITE, &status);
         if (status) {
             std::cerr << "Error opening FITS file: " << filename << " (Status: " << status << ")" << std::endl;
@@ -51,6 +66,7 @@ public:
     }
 
     ~FitsWrapper() {
+        freeWCS();
         if (fptr != nullptr) {
             int close_status = 0;
             fits_close_file(fptr, &close_status);
@@ -340,6 +356,62 @@ public:
         fits_write_col(fptr, typecode, colnum, 1, 1, numElements, (void*)dataPtr, &local_status);
         return local_status;
     }
+
+    // 1. Initialize WCSLIB directly from the FITS header
+    bool initWCS() {
+        freeWCS();
+        std::string header = readHeader();
+        if (header.empty()) return false;
+
+        // Count how many 80-char "cards" are in the header
+        int nkeyrec = header.length() / 81; 
+        
+        // Let WCSLIB parse the raw header string into its powerful structs!
+        int wcs_status = wcspih((char*)header.c_str(), nkeyrec, WCSHDR_all, 2, &nreject, &nwcs, &wcs);
+        
+        // status 0 means success
+        return wcs_status == 0 && nwcs > 0;
+    }
+
+    // 2. Convert Pixel (X, Y) to Sky (RA, Dec)
+    val pixToWorld(double xpix, double ypix) {
+        if (wcs == nullptr && !initWCS()) return val::null();
+
+        double pixcrd[2] = {xpix, ypix};
+        double imgcrd[2];
+        double phi[1], theta[1];
+        double world[2];
+        int stat[1];
+
+        // wcss2p is the core mathematical engine for Sky to Pixel
+        int status = wcsp2s(wcs, 1, 2, pixcrd, imgcrd, phi, theta, world, stat);
+        if (status) return val::null();
+
+        val result = val::object();
+        result.set("ra", world[0]);
+        result.set("dec", world[1]);
+        return result;
+    }
+
+    // 3. Convert Sky (RA, Dec) to Pixel (X, Y)
+    val worldToPix(double ra, double dec) {
+        if (wcs == nullptr && !initWCS()) return val::null();
+
+        double world[2] = {ra, dec};
+        double phi[1], theta[1];
+        double imgcrd[2];
+        double pixcrd[2];
+        int stat[1];
+
+        // wcsp2s is the core mathematical engine for Pixel to Sky
+        int status = wcss2p(wcs, 1, 2, world, phi, theta, imgcrd, pixcrd, stat);
+        if (status) return val::null();
+
+        val result = val::object();
+        result.set("x", pixcrd[0]);
+        result.set("y", pixcrd[1]);
+        return result;
+    }
 };
 
 EMSCRIPTEN_BINDINGS(fits_module) {
@@ -357,5 +429,8 @@ EMSCRIPTEN_BINDINGS(fits_module) {
         .function("writeColumn", &FitsWrapper::writeColumn)
         .function("updateKeyString", &FitsWrapper::updateKeyString)
         .function("updateKeyDouble", &FitsWrapper::updateKeyDouble)
+        .function("initWCS", &FitsWrapper::initWCS)
+        .function("pixToWorld", &FitsWrapper::pixToWorld)
+        .function("worldToPix", &FitsWrapper::worldToPix)
         .function("flush", &FitsWrapper::flush);
 }

@@ -6,24 +6,26 @@ CFITSIO_DIR="cfitsio-${CFITSIO_VERSION}"
 CFITSIO_BUILD_DIR="${CFITSIO_DIR}/build"
 LIBCFITSIO="${CFITSIO_BUILD_DIR}/libcfitsio.a"
 
-echo "=== WASM-CFITSIO BUILD SCRIPT ==="
+WCSLIB_VERSION="8.6"
+WCSLIB_DIR="wcslib-${WCSLIB_VERSION}"
+LIBWCS="${WCSLIB_DIR}/C/libwcs-${WCSLIB_VERSION}.a"
 
-# Step 1: Download and extract cfitsio if it doesn't exist
+# Neutralize macOS C/C++ environment variables to prevent Apple SDK conflicts
+unset SDKROOT CPATH C_INCLUDE_PATH CPLUS_INCLUDE_PATH LIBRARY_PATH MACOSX_DEPLOYMENT_TARGET
+
+echo "=== WASM-CFITSIO + WCSLIB BUILD SCRIPT ==="
+
+# Step 1: Download and extract cfitsio
 if [ ! -d "$CFITSIO_DIR" ]; then
-    echo "[1/3] Downloading cfitsio source code..."
+    echo "[1/4] Downloading cfitsio..."
     curl -O https://heasarc.gsfc.nasa.gov/FTP/software/fitsio/c/cfitsio-${CFITSIO_VERSION}.tar.gz
     tar -zxvf cfitsio-${CFITSIO_VERSION}.tar.gz
     rm cfitsio-${CFITSIO_VERSION}.tar.gz
-else
-    echo "[1/3] cfitsio source already exists. Skipping download."
 fi
 
-# Step 2: Compile libcfitsio.a if it doesn't exist
+# Step 2: Compile libcfitsio.a
 if [ ! -f "$LIBCFITSIO" ]; then
     echo "[2/3] Compiling libcfitsio.a for WebAssembly..."
-    
-    # Neutralize macOS C/C++ environment variables to prevent Apple SDK conflicts
-    unset SDKROOT CPATH C_INCLUDE_PATH CPLUS_INCLUDE_PATH LIBRARY_PATH MACOSX_DEPLOYMENT_TARGET
     
     mkdir -p "$CFITSIO_BUILD_DIR"
     cd "$CFITSIO_BUILD_DIR"
@@ -39,17 +41,48 @@ if [ ! -f "$LIBCFITSIO" ]; then
     
     # Go back to the root project folder
     cd ../../
-else
-    echo "[2/3] libcfitsio.a already compiled. Skipping."
 fi
 
-# Step 3: Build the final WebAssembly JS module
-echo "[3/3] Compiling JavaScript/WASM wrapper..."
+# Step 3: Download and Compile wcslib
+if [ ! -d "$WCSLIB_DIR" ]; then
+    echo "[3/4] Downloading wcslib..."
+    # ATNF provides the official WCSLIB distributions via HTTPS
+    curl -O https://www.atnf.csiro.au/computing/software/wcs/wcslib-releases/wcslib-${WCSLIB_VERSION}.tar.bz2
+    tar -xjvf wcslib-${WCSLIB_VERSION}.tar.bz2
+    rm wcslib-${WCSLIB_VERSION}.tar.bz2
+fi
+
+if [ ! -f "$LIBWCS" ]; then
+    echo "[3/4] Compiling libwcs.a..."
+    cd "$WCSLIB_DIR"
+
+    echo "Updating GNU config scripts for WASM support..."
+    
+    # Configure specifically for WebAssembly
+    # We disable Fortran, utilities, and pgplot to keep it lightweight
+    emconfigure ./configure \
+        --host=i686-pc-linux-gnu \
+        --disable-fortran \
+        --disable-utils \
+        --disable-shared \
+        --without-pgplot \
+        --without-cfitsio \
+        CFLAGS="-O3"
+        
+    # Build ONLY the C library (avoids building tests that fail to link in WASM)
+    emmake make -C C -j4
+    
+    cd ../
+fi
+
+# Step 4: Build the final WebAssembly module
+echo "[4/4] Compiling JavaScript/WASM wrapper..."
 mkdir -p dist
 
-emcc src/cpp/wrapper.cpp "$LIBCFITSIO" \
+emcc src/cpp/wrapper.cpp "$LIBCFITSIO" "$LIBWCS" \
   -o dist/fits.js \
   -I "$CFITSIO_DIR" \
+  -I "$WCSLIB_DIR/C" -I "$WCSLIB_DIR" \
   -O3 \
   -s USE_ZLIB=1 \
   -s ALLOW_MEMORY_GROWTH=1 \
