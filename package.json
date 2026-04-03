@@ -1,0 +1,18 @@
+{
+  "name": "wasm-cfitsio",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "./build.sh",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "files": [
+    "dist/"
+  ],
+  "devDependencies": {
+    "vitest": "^4.1.2"
+  }
+}

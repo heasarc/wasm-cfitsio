@@ -1,0 +1,34 @@
+# NPM / Node.js
+node_modules/
+package-lock.json
+npm-debug.log
+
+# Mac OS
+.DS_Store
+
+# Build Outputs (Generated automatically by build.sh)
+dist/
+
+# Downloaded C Library Source Code (Generated automatically by build.sh)
+cfitsio-latest.tar.gz
+cfitsio-*.tar.gz
+cfitsio-*/
+
+# WebAssembly & C++ temporary build artifacts
+*.o
+*.a
+*.obj
+*.so
+*.dylib
+*.dll
+*.wasm
+*.js.map
+
+# Testing
+coverage/
+
+# IDE / Editor folders
+.vscode/
+.idea/
+*.swp
+*.suo
