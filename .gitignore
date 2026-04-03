@@ -15,6 +15,7 @@ cfitsio-*.tar.gz
 cfitsio-*/
 
 wcslib-*
+wasm-cfitsio-*.tgz
 
 # WebAssembly & C++ temporary build artifacts
 *.o

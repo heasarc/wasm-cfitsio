@@ -88,6 +88,7 @@ emcc src/cpp/wrapper.cpp "$LIBCFITSIO" "$LIBWCS" \
   -s ALLOW_MEMORY_GROWTH=1 \
   -s EXPORT_ES6=1 \
   -s MODULARIZE=1 \
+  -s SINGLE_FILE=1 \
   -s EXPORT_NAME="createFitsModule" \
   -s FORCE_FILESYSTEM=1 \
   -s EXPORTED_RUNTIME_METHODS="['FS', 'HEAPU8']" \
