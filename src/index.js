@@ -70,6 +70,71 @@ export class FitsFile {
 
     getNumRows() { return this.fits.getNumRows(); }
     getNumCols() { return this.fits.getNumCols(); }
+
+    /**
+     * Gets the schema information (name, unit, format, type) for a specific column.
+     * @param {number} colNum - The 1-indexed column number
+     * @returns {Object|null}
+     */
+    getColumnInfo(colNum) {
+        const info = this.fits.getColumnInfo(colNum);
+        if (!info) return null;
+        
+        // Clean up cfitsio string formatting (removes trailing spaces and quotes)
+        const cleanString = (str) => str ? str.replace(/^'|'$/g, '').trim() : "";
+        
+        return {
+            typecode: info.typecode,
+            repeat: info.repeat,
+            width: info.width,
+            name: cleanString(info.name),
+            unit: cleanString(info.unit),
+            form: cleanString(info.form)
+        };
+    }
+
+    /**
+     * Writes a single numeric value to a specific cell in the FITS table.
+     * @param {number} colNum - The 1-indexed column number
+     * @param {number} rowNum - The 1-indexed row number
+     * @param {number} value - The numeric value to write
+     */
+    writeCell(colNum, rowNum, value) {
+        const status = this.fits.writeCellDouble(colNum, rowNum, Number(value));
+        if (status !== 0) {
+            throw new Error(`Failed to write cell. Status: ${status}`);
+        }
+        return status;
+    }
+
+    // --- Table Mutations ---
+    insertRows(firstRow, numRows = 1) { 
+        return this.fits.insertRows(firstRow, numRows); 
+    }
+    
+    deleteRows(firstRow, numRows = 1) { 
+        return this.fits.deleteRows(firstRow, numRows); 
+    }
+    
+    insertColumn(colNum, name, format) { 
+        return this.fits.insertColumn(colNum, name, format); 
+    }
+    
+    deleteColumn(colNum) { 
+        return this.fits.deleteColumn(colNum); 
+    }
+    
+    changeColumnName(colNum, newName) {
+        return this.fits.changeColumnName(colNum, newName);
+    }
+
+    changeColumnUnit(colNum, newUnit) {
+        return this.fits.changeColumnUnit(colNum, newUnit);
+    }
+
+    changeColumnFormat(colNum, newFormat) {
+        return this.fits.changeColumnFormat(colNum, newFormat);
+    }
     
     readColumn(colNum) { 
         const result = this.fits.readColumn(colNum);

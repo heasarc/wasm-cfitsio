@@ -246,6 +246,134 @@ public:
         return ncols;
     }
 
+    // Get comprehensive metadata for a specific column (1-indexed)
+    val getColumnInfo(int colnum) {
+        if (status || fptr == nullptr) return val::null();
+
+        int typecode = 0;
+        long repeat = 0;
+        long width = 0;
+        int local_status = 0;
+
+        // Get fundamental column structure
+        fits_get_coltype(fptr, colnum, &typecode, &repeat, &width, &local_status);
+        if (local_status) return val::null();
+
+        // Read Name, Unit, and Format keywords (ignoring errors if they don't exist)
+        char ttype[FLEN_VALUE] = "";
+        char tunit[FLEN_VALUE] = "";
+        char tform[FLEN_VALUE] = "";
+        char keyname[FLEN_KEYWORD];
+
+        local_status = 0;
+        snprintf(keyname, sizeof(keyname), "TTYPE%d", colnum);
+        fits_read_key(fptr, TSTRING, keyname, ttype, NULL, &local_status);
+
+        local_status = 0;
+        snprintf(keyname, sizeof(keyname), "TUNIT%d", colnum);
+        fits_read_key(fptr, TSTRING, keyname, tunit, NULL, &local_status);
+
+        local_status = 0;
+        snprintf(keyname, sizeof(keyname), "TFORM%d", colnum);
+        fits_read_key(fptr, TSTRING, keyname, tform, NULL, &local_status);
+
+        // Return as a JS object
+        val info = val::object();
+        info.set("typecode", typecode);
+        info.set("repeat", repeat);
+        info.set("width", width);
+        
+        // Convert char arrays to std::string for Emscripten val
+        info.set("name", val(std::string(ttype)));
+        info.set("unit", val(std::string(tunit)));
+        info.set("form", val(std::string(tform)));
+
+        return info;
+    }
+
+    // Write a single numeric value to a specific cell
+    int writeCellDouble(int colnum, long rownum, double value) {
+        if (status || fptr == nullptr) return status;
+        
+        double array[1] = {value};
+        fits_write_col(fptr, TDOUBLE, colnum, rownum, 1, 1, array, &status);
+        
+        return status;
+    }
+
+    // Insert empty rows (1-indexed)
+    int insertRows(long firstrow, long nrows) {
+        if (fptr == nullptr) return -1;
+        int local_status = 0;
+        fits_insert_rows(fptr, firstrow, nrows, &local_status);
+        status = local_status;
+        return status;
+    }
+
+    // Delete rows (1-indexed)
+    int deleteRows(long firstrow, long nrows) {
+        if (fptr == nullptr) return -1;
+        int local_status = 0;
+        fits_delete_rows(fptr, firstrow, nrows, &local_status);
+        status = local_status;
+        return status;
+    }
+
+    // Insert a new column (1-indexed)
+    // tform uses cfitsio formats (e.g., "1J" for Int32, "1D" for Float64, "20A" for String)
+    int insertColumn(int colnum, std::string ttype, std::string tform) {
+        if (fptr == nullptr) return -1;
+        int local_status = 0;
+        fits_insert_col(fptr, colnum, (char*)ttype.c_str(), (char*)tform.c_str(), &local_status);
+        status = local_status;
+        return status;
+    }
+
+    // Delete a column (1-indexed)
+    int deleteColumn(int colnum) {
+        if (fptr == nullptr) return -1;
+        int local_status = 0;
+        fits_delete_col(fptr, colnum, &local_status);
+        status = local_status;
+        return status;
+    }
+
+    // --- Table Column Modifications ---
+
+// Change the name of an existing column (1-indexed)
+    int changeColumnName(int colnum, std::string newName) {
+        if (fptr == nullptr) return -1;
+        int local_status = 0;
+        char keyname[FLEN_KEYWORD];
+        snprintf(keyname, sizeof(keyname), "TTYPE%d", colnum);
+        fits_update_key(fptr, TSTRING, keyname, (void*)newName.c_str(), "column name", &local_status);
+        status = local_status;
+        return status;
+    }
+
+    // Change the physical units of a column (1-indexed)
+    int changeColumnUnit(int colnum, std::string newUnit) {
+        if (fptr == nullptr) return -1;
+        int local_status = 0;
+        char keyname[FLEN_KEYWORD];
+        snprintf(keyname, sizeof(keyname), "TUNIT%d", colnum);
+        fits_update_key(fptr, TSTRING, keyname, (void*)newUnit.c_str(), "physical unit", &local_status);
+        status = local_status;
+        return status;
+    }
+
+    // Change the data format of a column (1-indexed)
+    // Note: Changing physical byte widths can corrupt table data if not careful.
+    int changeColumnFormat(int colnum, std::string newFormat) {
+        if (fptr == nullptr) return -1;
+        int local_status = 0;
+        char keyname[FLEN_KEYWORD];
+        snprintf(keyname, sizeof(keyname), "TFORM%d", colnum);
+        fits_update_key(fptr, TSTRING, keyname, (void*)newFormat.c_str(), "data format", &local_status);
+        status = local_status;
+        return status;
+    }
+
     // Read a specific column (1-indexed) as a Float64Array
     val readColumn(int colnum) {
         if (status || fptr == nullptr) return val::null();
@@ -431,5 +559,14 @@ EMSCRIPTEN_BINDINGS(fits_module) {
         .function("initWCS", &FitsWrapper::initWCS)
         .function("pixToWorld", &FitsWrapper::pixToWorld)
         .function("worldToPix", &FitsWrapper::worldToPix)
+        .function("getColumnInfo", &FitsWrapper::getColumnInfo)
+        .function("writeCellDouble", &FitsWrapper::writeCellDouble)
+        .function("insertRows", &FitsWrapper::insertRows)
+        .function("deleteRows", &FitsWrapper::deleteRows)
+        .function("insertColumn", &FitsWrapper::insertColumn)
+        .function("deleteColumn", &FitsWrapper::deleteColumn)
+        .function("changeColumnName", &FitsWrapper::changeColumnName)
+        .function("changeColumnUnit", &FitsWrapper::changeColumnUnit)
+        .function("changeColumnFormat", &FitsWrapper::changeColumnFormat)
         .function("flush", &FitsWrapper::flush);
 }

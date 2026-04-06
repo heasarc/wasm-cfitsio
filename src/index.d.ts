@@ -49,6 +49,44 @@ export class FitsFile {
     /** Gets the total number of columns in the current BINTABLE HDU */
     getNumCols(): number;
 
+    /** Gets the schema information (name, unit, format, type) for a specific column. */
+    getColumnInfo(colNum: number): {
+        typecode: number;
+        repeat: number;
+        width: number;
+        name: string;
+        unit: string;
+        form: string;
+    } | null;
+
+    /** Writes a single numeric value to a specific cell in the FITS table. */
+    writeCell(colNum: number, rowNum: number, value: number): number;
+
+    /** Inserts empty rows into the current table HDU. (1-indexed) */
+    insertRows(firstRow: number, numRows?: number): number;
+
+    /** Deletes rows from the current table HDU. (1-indexed) */
+    deleteRows(firstRow: number, numRows?: number): number;
+
+    /** Inserts a new column into the current table HDU. (1-indexed). 
+     *  Format uses cfitsio standard (e.g., '1J' for integer, '1D' for double, '20A' for string). */
+    insertColumn(colNum: number, name: string, format: string): number;
+
+    /** Deletes a column from the current table HDU. (1-indexed) */
+    deleteColumn(colNum: number): number;
+
+    /** Changes the name (TTYPEn) of an existing column. (1-indexed) */
+    changeColumnName(colNum: number, newName: string): number;
+
+    /** Changes the physical unit (TUNITn) of an existing column. (1-indexed) */
+    changeColumnUnit(colNum: number, newUnit: string): number;
+
+    /** 
+     * Changes the data format (TFORMn) of an existing column. (1-indexed)
+     * Warning: Changing physical byte widths without adjusting data can corrupt the table. 
+     */
+    changeColumnFormat(colNum: number, newFormat: string): number;
+
     /** Extracts a specific column (1-indexed) from the current BINTABLE HDU. Returns null if not a table. */
     readColumn(colNum: number): ColumnResult | null;
 
