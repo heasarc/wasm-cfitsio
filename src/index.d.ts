@@ -73,6 +73,9 @@ export class FitsFile {
     /** Flushes any modifications to memory and returns the updated FITS file bytes */
     save(): Uint8Array;
 
+    /** Flushes all pending writes to the WASM virtual file system */
+    flush(): void;
+
     /**
      * CRITICAL: Cleans up the WebAssembly memory and virtual file system.
      * Always call this when finished with the file to prevent memory leaks.

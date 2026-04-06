@@ -150,6 +150,10 @@ export class FitsFile {
         return new Uint8Array(modifiedData);
     }
 
+    flush() {
+        this.fits.flush();
+    }
+
     /**
      * VERY IMPORTANT: Cleans up WebAssembly memory and virtual files.
      */
