@@ -251,3 +251,125 @@ describe('readKeyword contract', () => {
         }
     });
 });
+
+describe('Mixed column types (btable.fits)', () => {
+
+    it('should return non-null for every column', async () => {
+        const fileData = loadFixture('btable.fits');
+        const fits = await FitsFile.open(fileData);
+
+        try {
+            fits.moveToHDU(2);
+            const numCols = fits.getNumCols();
+            expect(numCols).toBeGreaterThan(0);
+
+            for (let i = 1; i <= numCols; i++) {
+                const col = fits.readColumn(i);
+                // Core fix — no column should return null regardless of type
+                expect(col).not.toBeNull();
+                expect(col.data).not.toBeNull();
+                expect(col.data.length).toBeGreaterThan(0);
+            }
+        } finally {
+            fits.close();
+        }
+    });
+
+    it('should read string columns as StringArray with correct length', async () => {
+        const fileData = loadFixture('btable.fits');
+        const fits = await FitsFile.open(fileData);
+
+        try {
+            fits.moveToHDU(2);
+            const numRows = fits.getNumRows();
+            const numCols = fits.getNumCols();
+
+            let stringColFound = false;
+
+            for (let i = 1; i <= numCols; i++) {
+                const col = fits.readColumn(i);
+                if (col?.dataType !== 'StringArray') continue;
+
+                stringColFound = true;
+
+                // Length must equal nrows — not nrows * repeat
+                expect(col.data.length).toBe(numRows);
+
+                // Every element must be a string, not null, not 'ERROR_*'
+                for (const val of col.data) {
+                    expect(typeof val).toBe('string');
+                    expect(val).not.toMatch(/^ERROR_/);
+                    // No trailing spaces — cfitsio padding must be stripped
+                    expect(val).toBe(val.trimEnd());
+                }
+            }
+
+            // Ensure the fixture actually has string columns
+            expect(stringColFound).toBe(true);
+
+        } finally {
+            fits.close();
+        }
+    });
+
+    it('should read float32 columns as Float32Array with finite values', async () => {
+        const fileData = loadFixture('btable.fits');
+        const fits = await FitsFile.open(fileData);
+
+        try {
+            fits.moveToHDU(2);
+            const numRows = fits.getNumRows();
+            const numCols = fits.getNumCols();
+
+            let float32ColFound = false;
+
+            for (let i = 1; i <= numCols; i++) {
+                const col = fits.readColumn(i);
+                if (col?.dataType !== 'Float32Array') continue;
+
+                float32ColFound = true;
+
+                expect(col.data.length).toBe(numRows);
+                for (const val of col.data) {
+                    expect(typeof val).toBe('number');
+                    expect(isFinite(val)).toBe(true);
+                }
+            }
+
+            if (!float32ColFound) {
+                console.warn('btable.fits has no Float32Array columns — skipping float32 check');
+            }
+
+        } finally {
+            fits.close();
+        }
+    });
+
+    it('should read numeric columns with correct row count', async () => {
+        const fileData = loadFixture('btable.fits');
+        const fits = await FitsFile.open(fileData);
+
+        try {
+            fits.moveToHDU(2);
+            const numRows = fits.getNumRows();
+            const numCols = fits.getNumCols();
+
+            const numericTypes = [
+                'Int16Array', 'Int32Array', 'Float32Array',
+                'Float64Array', 'Uint8Array', 'BigInt64Array'
+            ];
+
+            for (let i = 1; i <= numCols; i++) {
+                const col = fits.readColumn(i);
+                if (!col || !numericTypes.includes(col.dataType)) continue;
+
+                // Numeric columns: length = nrows (repeat=1)
+                // or nrows * repeat for array-valued cells
+                expect(col.data.length).toBeGreaterThanOrEqual(numRows);
+            }
+
+        } finally {
+            fits.close();
+        }
+    });
+});

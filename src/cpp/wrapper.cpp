@@ -249,27 +249,30 @@ public:
     // Read a specific column (1-indexed) as a Float64Array
     val readColumn(int colnum) {
         if (status || fptr == nullptr) return val::null();
-        
-        long nrows = getNumRows();
-        if (nrows == 0) return val::null();
 
         int typecode = 0;
-        long repeat = 1, width = 1;
-        
-        // Find out exactly what data type this column is
-        fits_get_coltype(fptr, colnum, &typecode, &repeat, &width, &status);
-        if (status) return val::null();
+        long repeat  = 0;
+        long width   = 0;
+        int local_status = 0;
 
-        // If repeat > 1, it means each cell contains an array of numbers, not just one.
-        // We multiply nrows * repeat to get the total flat array size.
-        long num_elements = nrows * repeat;
-        int anynul = 0;
-        
-        clearDataVectors(); // Clear our shared memory vectors
-        val result = val::object();
+        fits_get_coltype(fptr, colnum, &typecode, &repeat, &width, &local_status);
+        if (local_status) return val::null();
 
-        // typecode can be negative for variable-length arrays, so we use abs()
+        if (typecode < 0) return val::null();
+
+        long nrows = 0;
+        fits_get_num_rows(fptr, &nrows, &local_status);
+        if (local_status) return val::null();
+
+        // For TSTRING: repeat = number of chars per cell, NOT number of elements
+        // num_elements is always nrows for string columns (one string per row)
+        // For numeric: repeat > 1 means array-valued cell
         int abs_type = std::abs(typecode);
+        long num_elements = (abs_type == TSTRING) ? nrows : nrows * repeat;
+
+        int anynul = 0;
+        clearDataVectors();
+        val result = val::object();
 
         switch(abs_type) {
             case TBYTE:
@@ -311,29 +314,25 @@ public:
                 result.set("data", val(typed_memory_view(imgF64.size(), imgF64.data())));
                 break;
             case TSTRING: {
-                // For strings, 'width' tells us the max characters per string
-                long max_len = width + 1; // +1 for null terminator
-                
-                // cfitsio expects an array of char pointers
-                std::vector<char*> str_ptrs(num_elements);
-                std::vector<char> str_buffer(num_elements * max_len);
-                
-                for(long i = 0; i < num_elements; ++i) {
+                long max_len = width + 1;  // width = chars per string from fits_get_coltype
+                std::vector<char*> str_ptrs(nrows);
+                std::vector<char>  str_buffer(nrows * max_len);
+
+                for (long i = 0; i < nrows; ++i) {
                     str_ptrs[i] = &str_buffer[i * max_len];
                 }
-                
-                fits_read_col(fptr, TSTRING, colnum, 1, 1, num_elements, NULL, str_ptrs.data(), &anynul, &status);
-                if (status) return val::null();
-                
-                // Convert to a standard JavaScript Array
+
+                fits_read_col(fptr, TSTRING, colnum, 1, 1, nrows, NULL,
+                            str_ptrs.data(), &anynul, &local_status);
+                if (local_status) return val::null();
+
                 val jsArray = val::array();
-                for(long i = 0; i < num_elements; ++i) {
+                for (long i = 0; i < nrows; ++i) {
                     std::string s(str_ptrs[i]);
-                    // Strip trailing spaces FITS files often pad strings with
-                    s.erase(s.find_last_not_of(" ") + 1); 
+                    s.erase(s.find_last_not_of(" ") + 1);
                     jsArray.set(i, val(s));
                 }
-                
+
                 result.set("dataType", val("StringArray"));
                 result.set("data", jsArray);
                 break;
@@ -342,7 +341,7 @@ public:
                 return val::null();
         }
 
-        if (status) return val::null();
+        if (local_status) return val::null();
         
         result.set("typecode", val(typecode));
         result.set("repeat", val(repeat));
