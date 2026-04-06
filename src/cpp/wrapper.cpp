@@ -93,19 +93,19 @@ public:
         return local_status; // 0 means success
     }
 
-    std::string readKeyword(std::string keyname) {
-        if (status || fptr == nullptr) return "";
+    val readKeyword(std::string keyname) {
+        if (status || fptr == nullptr) return val::null();
         char value[FLEN_VALUE];
         int local_status = 0;
         fits_read_keyword(fptr, keyname.c_str(), value, NULL, &local_status);
-        if (local_status) return "ERROR_" + std::to_string(local_status);
+        if (local_status) return val::null();   // keyword does not exist → null
 
         std::string str_val(value);
         if (str_val.length() >= 2 && str_val.front() == '\'' && str_val.back() == '\'') {
             str_val = str_val.substr(1, str_val.length() - 2);
         }
         str_val.erase(str_val.find_last_not_of(" ") + 1);
-        return str_val;
+        return val(str_val);
     }
 
     // Update or add a string keyword

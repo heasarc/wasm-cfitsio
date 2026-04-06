@@ -35,7 +35,7 @@ export class FitsFile {
     moveToHDU(hduNum: number): number;
 
     /** Reads a single keyword from the current HDU's header */
-    readKeyword(keyword: string): string;
+    readKeyword(keyword: string): string | null;
 
     /** Reads the entire header of the current HDU as a single string */
     readHeader(): string;

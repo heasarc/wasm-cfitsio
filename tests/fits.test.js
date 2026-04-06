@@ -166,3 +166,88 @@ describe('FitsFile WASM Library', () => {
     });
 
 });
+
+describe('readKeyword contract', () => {
+    it('should return null for a keyword that does not exist', async () => {
+        const fileData = loadFixture('test.fits');
+        const fits = await FitsFile.open(fileData);
+
+        try {
+            const val = fits.readKeyword('DOESNOTEXIST');
+            // Must be null — never "ERROR_202" or any other error string
+            expect(val).toBeNull();
+        } finally {
+            fits.close();
+        }
+    });
+
+    it('should return null for a missing keyword in a table HDU', async () => {
+        const fileData = loadFixture('btable.fits');
+        const fits = await FitsFile.open(fileData);
+
+        try {
+            fits.moveToHDU(2);
+            // OBJECT is an image keyword — unlikely to exist in a table HDU
+            const val = fits.readKeyword('OBJECT');
+            // May be null or a real string — but must never be "ERROR_*"
+            if (val !== null) {
+                expect(typeof val).toBe('string');
+                expect(val).not.toMatch(/^ERROR_/);
+            } else {
+                expect(val).toBeNull();
+            }
+        } finally {
+            fits.close();
+        }
+    });
+
+    it('should return a string for a keyword that exists', async () => {
+        const fileData = loadFixture('test.fits');
+        const fits = await FitsFile.open(fileData);
+
+        try {
+            // SIMPLE is always present in a primary HDU
+            const val = fits.readKeyword('SIMPLE');
+            expect(val).not.toBeNull();
+            expect(typeof val).toBe('string');
+            expect(val.length).toBeGreaterThan(0);
+        } finally {
+            fits.close();
+        }
+    });
+
+    it('should return an empty string for a keyword with an empty value', async () => {
+        const fileData = loadFixture('test.fits');
+        const fits = await FitsFile.open(fileData);
+
+        try {
+            // Write a keyword with an empty value, then read it back
+            fits.updateKeyString('EMPTYVAL', '', 'test empty value');
+            const val = fits.readKeyword('EMPTYVAL');
+            // Empty string is valid — distinct from null (missing)
+            expect(val).not.toBeNull();
+            expect(val).toBe('');
+        } finally {
+            fits.close();
+        }
+    });
+
+    it('should not return ERROR_ strings for any standard keyword absence', async () => {
+        const fileData = loadFixture('btable.fits');
+        const fits = await FitsFile.open(fileData);
+
+        try {
+            fits.moveToHDU(2);
+            // These image-specific keywords are absent in table HDUs
+            const imageOnlyKeywords = ['BZERO', 'BSCALE', 'BLANK', 'DATAMAX', 'DATAMIN'];
+            for (const kw of imageOnlyKeywords) {
+                const val = fits.readKeyword(kw);
+                if (val !== null) {
+                    expect(val).not.toMatch(/^ERROR_/);
+                }
+            }
+        } finally {
+            fits.close();
+        }
+    });
+});

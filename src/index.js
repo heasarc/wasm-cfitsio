@@ -37,7 +37,7 @@ export class FitsFile {
     getNumHDUs() { return this.fits.getNumHDUs(); }
     moveToHDU(hduNum) { return this.fits.moveToHDU(hduNum); }
     
-    readKeyword(keyword) { return this.fits.readKeyword(keyword); }
+    readKeyword(keyword) { return this.fits.readKeyword(keyword) ?? null; }
     readHeader() { return this.fits.readHeader(); }
 
     hasWCS() { return this.fits.initWCS(); }
