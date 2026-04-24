@@ -1,22 +1,12 @@
 # wasm-cfitsio
 
-A WebAssembly (WASM) port of the legendary NASA/HEASARC `cfitsio` library. 
+A WebAssembly (WASM) port of `cfitsio` and `wcslib` libraries. It is used primarily in the fviewer app.
 
 This package allows you to read, modify, and write FITS files directly in JavaScript and TypeScript. It is designed to work in both Node.js and modern web browsers.
-
-## Features
-- **Zero-Copy Memory Transfers:** Extracts images and table columns directly into JavaScript `TypedArrays` without duplicating data in memory.
-- **Dynamic Typing:** Automatically maps FITS data types (`BITPIX`, `TFORM`) to their exact JavaScript equivalents (e.g., `Int16Array`, `Float32Array`, `BigInt64Array`).
-- **Multi-Extension FITS (MEF):** Easily navigate between multiple Header Data Units (HDUs).
-- **Universal Table Support:** Read and write both Binary (`BINTABLE`) and ASCII (`TABLE`) extensions, including numeric and string columns.
-- **File Writing:** Modify header keywords and table data, then export the valid FITS file back to a `Uint8Array` to save to disk.
-- **TypeScript Ready:** Fully typed API for modern IDE auto-completion.
 
 ---
 
 ## Installation
-
-*(Note: Once published to NPM, developers will install via `npm install wasm-cfitsio`)*
 
 To use it locally in another project:
 ```bash
@@ -26,6 +16,8 @@ npm link
 # In your target project:
 npm link wasm-cfitsio
 ```
+
+Alternatively, run `npm pack` to package it in a tar file, then install it in other applications with `npm add /path/to/wasm-cfitsio-??.tgz`
 
 ---
 
@@ -129,7 +121,7 @@ The build script automatically downloads the `cfitsio` source code, patches macO
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/yourusername/wasm-cfitsio.git
+git clone git@sed-gitlab.gsfc.nasa.gov:heasarc/heasoft/cfitsio-wasm.git
 cd wasm-cfitsio
 
 # 2. Install dependencies
@@ -147,5 +139,3 @@ This project uses **Vitest** for highly concurrent ES Module testing.
 npm run test
 ```
 
-## Acknowledgements
-This library wraps the official [cfitsio](https://heasarc.gsfc.nasa.gov/fitsio/fitsio.html) C library provided by NASA's High Energy Astrophysics Science Archive Research Center (HEASARC).
