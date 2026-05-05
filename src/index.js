@@ -1,3 +1,5 @@
+// Copyright 2026, University of Maryland, All Rights Reserved
+
 import createFitsModule from './fits.js';
 
 let wasmModule = null;

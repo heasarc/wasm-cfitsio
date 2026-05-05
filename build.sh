@@ -1,4 +1,6 @@
 #!/bin/bash
+## Copyright 2026, University of Maryland, All Rights Reserved
+
 set -e # Stop the script immediately if any command fails
 
 CFITSIO_VERSION="4.6.3"

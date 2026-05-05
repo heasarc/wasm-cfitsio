@@ -1,3 +1,5 @@
+// Copyright 2026, University of Maryland, All Rights Reserved
+
 export interface ImageResult {
     bitpix: number;
     dataType: "Uint8Array" | "Int16Array" | "Int32Array" | "BigInt64Array" | "Float32Array" | "Float64Array";

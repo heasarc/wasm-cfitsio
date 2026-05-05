@@ -1,3 +1,5 @@
+// Copyright 2026, University of Maryland, All Rights Reserved
+
 #include <iostream>
 #include <string>
 #include <vector>
