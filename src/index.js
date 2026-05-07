@@ -63,11 +63,13 @@ export class FitsFile {
             case "Float64Array": safeData = new Float64Array(result.data.slice()); break;
             default: safeData = new Float32Array(result.data.slice());
         }
+        const pixScale = this.fits.getPixelScale();
 
         return {
             bitpix: result.bitpix,
             dataType: result.dataType,
-            data: safeData
+            data: safeData,
+            pixScale: pixScale
         };
     }
 
