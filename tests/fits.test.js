@@ -373,3 +373,480 @@ describe('Mixed column types (btable.fits)', () => {
         }
     });
 });
+
+describe('Table Schema Mutations (Phase 3)', () => {
+    it('should read standard column metadata correctly', async () => {
+        const fileData = loadFixture('btable.fits');
+        const fits = await FitsFile.open(fileData);
+        
+        try {
+            fits.moveToHDU(2);
+            
+            // Get info for the first column
+            const info = fits.getColumnInfo(1);
+            
+            expect(info).not.toBeNull();
+            expect(info).toHaveProperty('typecode');
+            expect(info).toHaveProperty('repeat');
+            expect(info).toHaveProperty('width');
+            expect(info).toHaveProperty('name');
+            expect(typeof info.name).toBe('string');
+            
+            // Ensure cfitsio's quotes and padding were stripped properly by your JS wrapper
+            expect(info.name).not.toMatch(/^'/);
+            expect(info.name).not.toMatch(/'$/);
+            expect(info.name).toBe(info.name.trim());
+        } finally {
+            fits.close();
+        }
+    });
+
+    it('should change column name and units successfully', async () => {
+        const fileData = loadFixture('btable.fits');
+        const fits = await FitsFile.open(fileData);
+        
+        try {
+            fits.moveToHDU(2);
+            
+            // Change metadata
+            fits.changeColumnName(1, "NEW_NAME");
+            fits.changeColumnUnit(1, "m/s");
+            
+            // Save and reopen to verify changes persisted to the FITS header
+            const newBytes = fits.save();
+            const fits2 = await FitsFile.open(newBytes);
+            
+            try {
+                fits2.moveToHDU(2);
+                const info = fits2.getColumnInfo(1);
+                
+                expect(info.name).toBe("NEW_NAME");
+                expect(info.unit).toBe("m/s");
+            } finally {
+                fits2.close();
+            }
+        } finally {
+            fits.close();
+        }
+    });
+
+    it('should insert and delete columns conforming to FITS standards', async () => {
+        const fileData = loadFixture('btable.fits');
+        const fits = await FitsFile.open(fileData);
+        
+        try {
+            fits.moveToHDU(2);
+            const initialCols = fits.getNumCols();
+            const targetCol = initialCols + 1; // Append to end
+            
+            // Insert a standard 64-bit float (1D) column
+            const status = fits.insertColumn(targetCol, "TEST_COL", "1D");
+            expect(status).toBe(0);
+            expect(fits.getNumCols()).toBe(initialCols + 1);
+            
+            // Verify the column info
+            const info = fits.getColumnInfo(targetCol);
+            expect(info.name).toBe("TEST_COL");
+            expect(info.form).toBe("1D"); // 1D is the FITS standard for Float64
+            
+            // Write a cell to the new column to prove it allocated correctly
+            fits.writeCell(targetCol, 1, 99.9);
+            const colData = fits.readColumn(targetCol);
+            expect(colData.dataType).toBe("Float64Array");
+            expect(colData.data[0]).toBeCloseTo(99.9);
+
+            // Now delete the column
+            const delStatus = fits.deleteColumn(targetCol);
+            expect(delStatus).toBe(0);
+            expect(fits.getNumCols()).toBe(initialCols); // Back to original
+        } finally {
+            fits.close();
+        }
+    });
+
+    it('should insert and delete rows accurately', async () => {
+        const fileData = loadFixture('btable.fits');
+        const fits = await FitsFile.open(fileData);
+        
+        try {
+            fits.moveToHDU(2);
+            const initialRows = fits.getNumRows();
+            
+            // Insert 5 rows at the end of the table
+            // FITS row insertion is 1-indexed. Inserting at initialRows appends them.
+            fits.insertRows(initialRows, 5);
+            expect(fits.getNumRows()).toBe(initialRows + 5);
+            
+            // The new rows should be initialized to zeros/nulls. 
+            // Let's write to the last newly created row (initialRows + 5)
+            fits.writeCell(1, initialRows + 5, 42);
+            
+            // Delete 2 rows starting from the end
+            fits.deleteRows(initialRows + 4, 2);
+            
+            // Verify final row count
+            expect(fits.getNumRows()).toBe(initialRows + 3);
+        } finally {
+            fits.close();
+        }
+    });
+});
+
+describe('Header Compliance & Mandatory Keywords', () => {
+    it('should contain mandatory primary header keywords', async () => {
+        const fileData = loadFixture('test.fits');
+        const fits = await FitsFile.open(fileData);
+        
+        try {
+            fits.moveToHDU(1); // Primary HDU
+            
+            // FITS Standard 4.0: First three keywords MUST be SIMPLE, BITPIX, and NAXIS
+            const simple = fits.readKeyword('SIMPLE');
+            const bitpix = fits.readKeyword('BITPIX');
+            const naxis = fits.readKeyword('NAXIS');
+            
+            expect(simple).toBe('T'); // Booleans are represented as 'T' or 'F'
+            expect(bitpix).not.toBeNull();
+            expect(naxis).not.toBeNull();
+            
+            // BITPIX and NAXIS should parse as numbers
+            expect(!isNaN(Number(bitpix))).toBe(true);
+            expect(!isNaN(Number(naxis))).toBe(true);
+        } finally {
+            fits.close();
+        }
+    });
+
+    it('should return exactly 80-character header cards and end with END', async () => {
+        const fileData = loadFixture('test.fits');
+        const fits = await FitsFile.open(fileData);
+        
+        try {
+            fits.moveToHDU(1);
+            const fullHeader = fits.readHeader();
+            
+            // We split by newline, dropping the final empty string
+            const cards = fullHeader.split('\n').filter(line => line.length > 0);
+            
+            expect(cards.length).toBeGreaterThan(0);
+            
+            let foundEnd = false;
+            for (const card of cards) {
+                // STRICT FITS STANDARD: Every card must be exactly 80 chars
+                expect(card.length).toBe(80);
+                if (card.startsWith('END ')) {
+                    foundEnd = true;
+                }
+            }
+            
+            expect(foundEnd).toBe(true);
+        } finally {
+            fits.close();
+        }
+    });
+
+    it('should accurately write and read standard 8-character keywords', async () => {
+        const fileData = loadFixture('test.fits');
+        const fits = await FitsFile.open(fileData);
+        
+        try {
+            // FITS standard keyword limit is 8 characters.
+            // We'll test both string and numeric types.
+            fits.updateKeyString("TESTSTR", "VALUE", "A string comment");
+            fits.updateKeyDouble("TESTNUM", 123.456, "A double comment");
+            
+            // Read them back from memory
+            const strVal = fits.readKeyword("TESTSTR");
+            const numVal = fits.readKeyword("TESTNUM");
+            
+            expect(strVal).toBe("VALUE");
+            // readKeyword returns strings, so we cast to compare the double
+            expect(Number(numVal)).toBeCloseTo(123.456);
+        } finally {
+            fits.close();
+        }
+    });
+});
+
+describe('Explicit BITPIX Verification', () => {
+    it('should map the fixture BITPIX to the correct JS TypedArray', async () => {
+        // Standard FITS BITPIX to JS TypedArray mappings
+        const expectedMappings = {
+            8:   { type: "Uint8Array",    buffer: Uint8Array },
+            16:  { type: "Int16Array",    buffer: Int16Array },
+            32:  { type: "Int32Array",    buffer: Int32Array },
+            64:  { type: "BigInt64Array", buffer: BigInt64Array },
+            "-32": { type: "Float32Array",  buffer: Float32Array },
+            "-64": { type: "Float64Array",  buffer: Float64Array }
+        };
+
+        const fileData = loadFixture('test.fits');
+        const fits = await FitsFile.open(fileData);
+        
+        try {
+            // Find the image HDU
+            if (fits.getNumHDUs() > 1) {
+                fits.moveToHDU(2);
+            } else {
+                fits.moveToHDU(1);
+            }
+            
+            const image = fits.readImage();
+            expect(image).not.toBeNull();
+            
+            const bitpixStr = String(image.bitpix);
+            const expected = expectedMappings[bitpixStr];
+            
+            // Assert that the wrapper mapped it perfectly
+            expect(expected).toBeDefined();
+            expect(image.dataType).toBe(expected.type);
+            expect(image.data).toBeInstanceOf(expected.buffer);
+            
+            // Ensure the data array actually has content
+            expect(image.data.length).toBeGreaterThan(0);
+            
+        } finally {
+            fits.close();
+        }
+    });
+});
+
+describe('WCS & Coordinate Transformations', () => {
+    it('should safely propagate invalid coordinate inputs without crashing WASM', async () => {
+        const fileData = loadFixture('test.fits');
+        const fits = await FitsFile.open(fileData);
+        
+        try {
+            if (fits.getNumHDUs() > 1) fits.moveToHDU(2);
+            
+            if (fits.hasWCS()) {
+                // Feed it NaN. WCSLIB will perform the math, propagate the NaN, 
+                // and safely return it without crashing the WASM memory.
+                const sky = fits.pixToWorld(NaN, NaN);
+                
+                expect(sky).not.toBeNull();
+                expect(Number.isNaN(sky.ra)).toBe(true);
+                expect(Number.isNaN(sky.dec)).toBe(true);
+                
+                // Infinity should similarly propagate or be rejected mathematically
+                const pix = fits.worldToPix(Infinity, Infinity);
+                expect(pix).not.toBeNull();
+                expect(Number.isNaN(pix.x) || !Number.isFinite(pix.x)).toBe(true);
+            }
+        } finally {
+            fits.close();
+        }
+    });
+
+    it('should maintain extreme sub-pixel precision in round-trip transforms', async () => {
+        const fileData = loadFixture('test.fits');
+        const fits = await FitsFile.open(fileData);
+        
+        try {
+            if (fits.getNumHDUs() > 1) {
+                fits.moveToHDU(2);
+            } else {
+                fits.moveToHDU(1);
+            }
+            
+            if (fits.hasWCS()) {
+                // Highly specific floating point pixel coordinates
+                const originalX = 153.78912;
+                const originalY = 88.12345;
+                
+                // Pixel -> Sky
+                const sky = fits.pixToWorld(originalX, originalY);
+                
+                expect(sky).not.toBeNull();
+                expect(sky).toHaveProperty('ra');
+                expect(sky).toHaveProperty('dec');
+                expect(isFinite(sky.ra)).toBe(true);
+                expect(isFinite(sky.dec)).toBe(true);
+                
+                // Sky -> Pixel
+                const pix = fits.worldToPix(sky.ra, sky.dec);
+                
+                expect(pix).not.toBeNull();
+                
+                // FITS WCS standards require high floating point accuracy.
+                // We expect the round-trip to be identical down to at least 5 decimal places.
+                expect(pix.x).toBeCloseTo(originalX, 5);
+                expect(pix.y).toBeCloseTo(originalY, 5);
+            } else {
+                console.warn("Skipping WCS precision test: 'test.fits' lacks WCS headers.");
+            }
+        } finally {
+            fits.close();
+        }
+    });
+});
+
+describe('Data Scaling: BSCALE / BZERO', () => {
+    it('should automatically apply BSCALE and BZERO when reading image data', async () => {
+        const fileData = loadFixture('test.fits');
+        
+        // 1. Open the original file and grab a baseline pixel value
+        let fits = await FitsFile.open(fileData);
+        let origVal;
+        let bitpix;
+        
+        try {
+            if (fits.getNumHDUs() > 1) fits.moveToHDU(2);
+            else fits.moveToHDU(1);
+            
+            const origImage = fits.readImage();
+            expect(origImage).not.toBeNull();
+            
+            origVal = origImage.data[0];
+            bitpix = origImage.bitpix;
+            
+            // Add scaling keywords: FITS standard says Physical = (Raw * BSCALE) + BZERO
+            fits.updateKeyDouble('BSCALE', 2.0, 'Test Scale');
+            fits.updateKeyDouble('BZERO', 100.0, 'Test Offset');
+            
+        } catch(e) {
+            fits.close();
+            throw e;
+        }
+
+        // Save the modifications to a new byte array and close the original
+        const modifiedBytes = fits.save();
+        fits.close();
+        
+        // 2. Reopen the modified file. 
+        // cfitsio should parse the new header and automatically apply the math 
+        // during fits_read_pix.
+        const scaledFits = await FitsFile.open(modifiedBytes);
+        try {
+            if (scaledFits.getNumHDUs() > 1) scaledFits.moveToHDU(2);
+            else scaledFits.moveToHDU(1);
+            
+            const scaledImage = scaledFits.readImage();
+            const scaledVal = scaledImage.data[0];
+            
+            // Calculate the expected value using FITS standard formula
+            let expectedVal = (origVal * 2.0) + 100.0;
+            
+            // IMPORTANT CATCH: If the original image was an integer (e.g., BITPIX 16 or 32), 
+            // your wrapper forces fits_read_pix to output TSHORT or TINT.
+            // This means cfitsio will mathematically calculate the float, but then TRUNCATE 
+            // it back to an integer before handing it to your Int16Array!
+            if (bitpix > 0) {
+                expectedVal = Math.trunc(expectedVal);
+            }
+            
+            // We use toBeCloseTo in case of floating point precision drift
+            expect(scaledVal).toBeCloseTo(expectedVal, 4);
+            
+        } finally {
+            scaledFits.close();
+        }
+    });
+});
+
+describe('File Writing and Export Integrity (Phase 6)', () => {
+        it('should correctly overwrite a full column using WASM HEAPU8 memory', async () => {
+            const fileData = loadFixture('btable.fits');
+            const fits = await FitsFile.open(fileData);
+            
+            try {
+                fits.moveToHDU(2);
+                
+                let targetCol = 1;
+                let colInfo = fits.getColumnInfo(targetCol);
+                
+                if (colInfo.form.includes('A')) {
+                    targetCol = 2; 
+                }
+                
+                const origCol = fits.readColumn(targetCol);
+                expect(origCol).not.toBeNull();
+                expect(origCol.data.length).toBeGreaterThan(0);
+                
+                const newArray = new origCol.data.constructor(origCol.data.length);
+                for (let i = 0; i < newArray.length; i++) {
+                    newArray[i] = i * 2.5; 
+                }
+                
+                const writeStatus = fits.writeColumn(targetCol, newArray);
+                expect(writeStatus).toBe(0);
+                
+                const modifiedBytes = fits.save();
+                fits.close(); 
+                
+                const fits2 = await FitsFile.open(modifiedBytes);
+                try {
+                    fits2.moveToHDU(2);
+                    const modifiedCol = fits2.readColumn(targetCol);
+                    
+                    expect(modifiedCol.data.length).toBe(newArray.length);
+                    // Dynamically test the first and last elements so we don't go out of bounds
+                    expect(modifiedCol.data[0]).toBeCloseTo(0);
+                    
+                    const lastIndex = modifiedCol.data.length - 1;
+                    expect(modifiedCol.data[lastIndex]).toBeCloseTo(lastIndex * 2.5);
+                } finally {
+                    fits2.close();
+                }
+            } catch (e) {
+                if (fits.fits) fits.close();
+                throw e;
+            }
+        });
+
+        it('should reject invalid array types in writeColumn', async () => {
+            const fileData = loadFixture('btable.fits');
+            const fits = await FitsFile.open(fileData);
+            
+            try {
+                fits.moveToHDU(2);
+                const badData = [1, 2, 3, 4, 5]; 
+                
+                expect(() => {
+                    fits.writeColumn(1, badData);
+                }).toThrow("Unsupported array type for writing");
+                
+            } finally {
+                fits.close();
+            }
+        });
+
+        it('should preserve unmodified HDUs when saving changes', async () => {
+            const fileData = loadFixture('btable.fits');
+            const fits = await FitsFile.open(fileData);
+            
+            try {
+                // 1. Read a baseline from the primary HDU
+                fits.moveToHDU(1);
+                const originalSimple = fits.readKeyword('SIMPLE');
+                
+                // 2. Move to HDU 2 (Table) and make a safe modification (adding a keyword)
+                fits.moveToHDU(2);
+                fits.updateKeyString("TESTSAVE", "MODIFIED", "Testing HDU isolation");
+                
+                // 3. Save the changes
+                const modifiedBytes = fits.save();
+                fits.close();
+                
+                // 4. Reopen and verify HDU 1 was untouched while HDU 2 kept the change
+                const fits2 = await FitsFile.open(modifiedBytes);
+                try {
+                    fits2.moveToHDU(1);
+                    expect(fits2.readKeyword('SIMPLE')).toBe(originalSimple);
+                    
+                    fits2.moveToHDU(2);
+                    expect(fits2.readKeyword('TESTSAVE')).toBe("MODIFIED");
+                    
+                    // Verify the table can still be read safely
+                    const col = fits2.readColumn(1); 
+                    expect(col).not.toBeNull();
+                    expect(col.data.length).toBeGreaterThan(0);
+                } finally {
+                    fits2.close();
+                }
+            } catch (e) {
+                if (fits.fits) fits.close();
+                throw e;
+            }
+        });
+    });

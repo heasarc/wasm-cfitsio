@@ -138,26 +138,28 @@ public:
     std::string readHeader() {
         if (status || fptr == nullptr) return "";
 
-        int keysexist = 0;
-        int morekeys = 0;
+        char* header_str = nullptr;
+        int nkeys = 0;
         int local_status = 0;
+
+        // fits_hdr2str returns the raw 80-char padded cards, including END
+        fits_hdr2str(fptr, 0, nullptr, 0, &header_str, &nkeys, &local_status);
         
-        // Find out how many keywords are in this header
-        fits_get_hdrspace(fptr, &keysexist, &morekeys, &local_status);
-        if (local_status) return "";
+        if (local_status || header_str == nullptr) return "";
 
-        std::string header = "";
-        char card[FLEN_CARD]; // FLEN_CARD is 81 (80 chars + null terminator)
-
-        // Read each keyword card one by one (1-indexed)
-        for (int i = 1; i <= keysexist; i++) {
-            fits_read_record(fptr, i, card, &local_status);
-            if (!local_status) {
-                header += std::string(card) + "\n";
-            }
+        // fits_hdr2str returns a continuous string without newlines.
+        // We will insert newlines every 80 characters so it matches JS expectations.
+        std::string formatted_header = "";
+        std::string raw_header(header_str);
+        
+        for (size_t i = 0; i < raw_header.length(); i += 80) {
+            formatted_header += raw_header.substr(i, 80) + "\n";
         }
-        
-        return header;
+
+        // cfitsio allocated header_str, we must free it
+        fits_free_memory(header_str, &local_status);
+
+        return formatted_header;
     }
 
     val readImage() {
