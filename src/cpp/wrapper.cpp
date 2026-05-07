@@ -379,7 +379,8 @@ public:
     }
 
     // Read a specific column (1-indexed) as a Float64Array
-    val readColumn(int colnum) {
+    // Read a specific column, optionally specifying the starting row and number of rows
+    val readColumn(int colnum, long firstrow, long numrows) {
         if (status || fptr == nullptr) return val::null();
 
         int typecode = 0;
@@ -388,78 +389,84 @@ public:
         int local_status = 0;
 
         fits_get_coltype(fptr, colnum, &typecode, &repeat, &width, &local_status);
+        if (local_status || typecode < 0) return val::null();
+
+        long total_rows = 0;
+        fits_get_num_rows(fptr, &total_rows, &local_status);
         if (local_status) return val::null();
 
-        if (typecode < 0) return val::null();
+        // 1-indexed bounds checking and defaults
+        if (firstrow < 1) firstrow = 1;
+        
+        // If numrows is -1 (default), or extends past the end, clamp it to the remaining rows
+        if (numrows <= 0 || (firstrow + numrows - 1 > total_rows)) {
+            numrows = total_rows - firstrow + 1;
+        }
+        
+        if (numrows <= 0) return val::null(); // Nothing to read
 
-        long nrows = 0;
-        fits_get_num_rows(fptr, &nrows, &local_status);
-        if (local_status) return val::null();
-
-        // For TSTRING: repeat = number of chars per cell, NOT number of elements
-        // num_elements is always nrows for string columns (one string per row)
-        // For numeric: repeat > 1 means array-valued cell
         int abs_type = std::abs(typecode);
-        long num_elements = (abs_type == TSTRING) ? nrows : nrows * repeat;
+        long num_elements = (abs_type == TSTRING) ? numrows : numrows * repeat;
 
         int anynul = 0;
         clearDataVectors();
         val result = val::object();
 
+        // Notice we now pass `firstrow` into the fits_read_col commands instead of `1`
         switch(abs_type) {
             case TBYTE:
             case TLOGICAL:
                 img8.resize(num_elements);
-                fits_read_col(fptr, TBYTE, colnum, 1, 1, num_elements, NULL, img8.data(), &anynul, &status);
+                fits_read_col(fptr, TBYTE, colnum, firstrow, 1, num_elements, NULL, img8.data(), &anynul, &status);
                 result.set("dataType", val("Uint8Array"));
                 result.set("data", val(typed_memory_view(img8.size(), img8.data())));
                 break;
             case TSHORT:
                 img16.resize(num_elements);
-                fits_read_col(fptr, TSHORT, colnum, 1, 1, num_elements, NULL, img16.data(), &anynul, &status);
+                fits_read_col(fptr, TSHORT, colnum, firstrow, 1, num_elements, NULL, img16.data(), &anynul, &status);
                 result.set("dataType", val("Int16Array"));
                 result.set("data", val(typed_memory_view(img16.size(), img16.data())));
                 break;
             case TINT:
             case TLONG:
                 img32.resize(num_elements);
-                fits_read_col(fptr, TINT, colnum, 1, 1, num_elements, NULL, img32.data(), &anynul, &status);
+                fits_read_col(fptr, TINT, colnum, firstrow, 1, num_elements, NULL, img32.data(), &anynul, &status);
                 result.set("dataType", val("Int32Array"));
                 result.set("data", val(typed_memory_view(img32.size(), img32.data())));
                 break;
             case TLONGLONG:
                 img64.resize(num_elements);
-                fits_read_col(fptr, TLONGLONG, colnum, 1, 1, num_elements, NULL, img64.data(), &anynul, &status);
+                fits_read_col(fptr, TLONGLONG, colnum, firstrow, 1, num_elements, NULL, img64.data(), &anynul, &status);
                 result.set("dataType", val("BigInt64Array"));
                 result.set("data", val(typed_memory_view(img64.size(), img64.data())));
                 break;
             case TFLOAT:
                 imgF32.resize(num_elements);
-                fits_read_col(fptr, TFLOAT, colnum, 1, 1, num_elements, NULL, imgF32.data(), &anynul, &status);
+                fits_read_col(fptr, TFLOAT, colnum, firstrow, 1, num_elements, NULL, imgF32.data(), &anynul, &status);
                 result.set("dataType", val("Float32Array"));
                 result.set("data", val(typed_memory_view(imgF32.size(), imgF32.data())));
                 break;
             case TDOUBLE:
                 imgF64.resize(num_elements);
-                fits_read_col(fptr, TDOUBLE, colnum, 1, 1, num_elements, NULL, imgF64.data(), &anynul, &status);
+                fits_read_col(fptr, TDOUBLE, colnum, firstrow, 1, num_elements, NULL, imgF64.data(), &anynul, &status);
                 result.set("dataType", val("Float64Array"));
                 result.set("data", val(typed_memory_view(imgF64.size(), imgF64.data())));
                 break;
             case TSTRING: {
-                long max_len = width + 1;  // width = chars per string from fits_get_coltype
-                std::vector<char*> str_ptrs(nrows);
-                std::vector<char>  str_buffer(nrows * max_len);
+                long max_len = width + 1;
+                std::vector<char*> str_ptrs(numrows);
+                std::vector<char>  str_buffer(numrows * max_len);
 
-                for (long i = 0; i < nrows; ++i) {
+                for (long i = 0; i < numrows; ++i) {
                     str_ptrs[i] = &str_buffer[i * max_len];
                 }
 
-                fits_read_col(fptr, TSTRING, colnum, 1, 1, nrows, NULL,
+                fits_read_col(fptr, TSTRING, colnum, firstrow, 1, numrows, NULL,
                             str_ptrs.data(), &anynul, &local_status);
                 if (local_status) return val::null();
 
                 val jsArray = val::array();
-                for (long i = 0; i < nrows; ++i) {
+                for (long i = 0; i < numrows; ++i) {
                     std::string s(str_ptrs[i]);
                     s.erase(s.find_last_not_of(" ") + 1);
                     jsArray.set(i, val(s));

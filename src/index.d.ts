@@ -96,8 +96,12 @@ export class FitsFile {
      */
     changeColumnFormat(colNum: number, newFormat: string): number;
 
-    /** Extracts a specific column (1-indexed) from the current BINTABLE HDU. Returns null if not a table. */
-    readColumn(colNum: number): ColumnResult | null;
+    /** 
+     * Extracts a specific column (1-indexed) from the current BINTABLE HDU. 
+     * You can optionally specify a row range for pagination.
+     * Returns null if not a table or if out of bounds.
+     */
+    readColumn(colNum: number, firstRow?: number, numRows?: number): ColumnResult | null;
 
     // Write column data
     writeColumn(colNum: number, dataArray: any): number;

@@ -372,6 +372,42 @@ describe('Mixed column types (btable.fits)', () => {
             fits.close();
         }
     });
+
+    it('should read a specific range of rows (pagination)', async () => {
+        const fileData = loadFixture('btable.fits');
+        const fits = await FitsFile.open(fileData);
+
+        try {
+            fits.moveToHDU(2);
+            
+            // 1. Read the entire column
+            const fullCol = fits.readColumn(1);
+            expect(fullCol).not.toBeNull();
+            
+            const totalRows = fits.getNumRows();
+            expect(fullCol.data.length).toBeGreaterThanOrEqual(totalRows);
+
+            if (totalRows > 3) {
+                // 2. Read just rows 2, 3, and 4 (Note: FITS is 1-indexed!)
+                const pagedCol = fits.readColumn(1, 2, 3);
+                
+                expect(pagedCol).not.toBeNull();
+                
+                // length should be 3 rows * repeat
+                const expectedLength = 3 * pagedCol.repeat;
+                expect(pagedCol.data.length).toBe(expectedLength);
+                
+                // 3. Verify the data perfectly matches the sliced original data
+                // Row 2 in FITS (1-indexed) corresponds to elements starting at index `1 * repeat` in JS (0-indexed)
+                const startIdx = 1 * pagedCol.repeat;
+                
+                expect(pagedCol.data[0]).toBe(fullCol.data[startIdx]);
+                expect(pagedCol.data[pagedCol.data.length - 1]).toBe(fullCol.data[startIdx + expectedLength - 1]);
+            }
+        } finally {
+            fits.close();
+        }
+    });
 });
 
 describe('Table Schema Mutations (Phase 3)', () => {

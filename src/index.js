@@ -141,8 +141,14 @@ export class FitsFile {
         return this.fits.changeColumnFormat(colNum, newFormat);
     }
     
-    readColumn(colNum) { 
-        const result = this.fits.readColumn(colNum);
+    /**
+     * Extracts a specific column from the table.
+     * @param {number} colNum - The 1-indexed column number
+     * @param {number} [firstRow=1] - The 1-indexed starting row (default: 1)
+     * @param {number} [numRows=-1] - The number of rows to read (default: all remaining)
+     */
+    readColumn(colNum, firstRow = 1, numRows = -1) { 
+        const result = this.fits.readColumn(colNum, Number(firstRow), Number(numRows));
         if (!result || !result.data) return null;
         
         let safeData;
