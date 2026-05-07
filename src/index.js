@@ -45,6 +45,7 @@ export class FitsFile {
     hasWCS() { return this.fits.initWCS(); }
     pixToWorld(x, y) { return this.fits.pixToWorld(Number(x), Number(y)); }
     worldToPix(ra, dec) { return this.fits.worldToPix(Number(ra), Number(dec)); }
+    getPixelScale() { return this.fits.getPixelScale() ?? null; }
     
     readImage() { 
         const result = this.fits.readImage();

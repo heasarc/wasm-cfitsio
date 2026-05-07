@@ -679,6 +679,31 @@ describe('WCS & Coordinate Transformations', () => {
             fits.close();
         }
     });
+    it('should extract the WCS pixel scale', async () => {
+        const fileData = loadFixture('test.fits');
+        const fits = await FitsFile.open(fileData);
+        
+        try {
+            if (fits.getNumHDUs() > 1) fits.moveToHDU(2);
+            else fits.moveToHDU(1);
+            
+            if (fits.hasWCS()) {
+                const scale = fits.getPixelScale();
+                
+                expect(scale).not.toBeNull();
+                expect(scale).toHaveProperty('scaleX');
+                expect(scale).toHaveProperty('scaleY');
+                expect(scale).toHaveProperty('unitX');
+                expect(scale).toHaveProperty('unitY');
+                
+                // Most astronomical FITS files use degrees
+                expect(typeof scale.scaleX).toBe('number');
+                expect(typeof scale.unitX).toBe('string');
+            }
+        } finally {
+            fits.close();
+        }
+    });
 });
 
 describe('Data Scaling: BSCALE / BZERO', () => {

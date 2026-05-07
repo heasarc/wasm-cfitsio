@@ -23,6 +23,13 @@ export interface WCSParams {
 export interface WorldCoords { ra: number; dec: number; }
 export interface PixelCoords { x: number; y: number; }
 
+export interface PixelScale { 
+    scaleX: number; 
+    scaleY: number; 
+    unitX: string; 
+    unitY: string; 
+}
+
 export class FitsFile {
     /**
      * Initializes the WebAssembly module and opens the FITS file from memory.
@@ -109,6 +116,9 @@ export class FitsFile {
 
     /** Converts Sky coordinates (RA, Dec) to Pixel coordinates (X, Y) */
     worldToPix(ra: number, dec: number): PixelCoords | null;
+
+    /** Gets the WCS pixel scale (coordinate deltas) and physical units */
+    getPixelScale(): PixelScale | null;
 
     /** Flushes any modifications to memory and returns the updated FITS file bytes */
     save(): Uint8Array;

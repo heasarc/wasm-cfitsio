@@ -543,6 +543,21 @@ public:
         result.set("y", pixcrd[1]);
         return result;
     }
+    // 4. Get the WCS Pixel Scale
+    val getPixelScale() {
+        if (wcs == nullptr && !initWCS()) return val::null();
+
+        val result = val::object();
+        // wcs->cdelt contains the parsed coordinate increments (scale)
+        result.set("scaleX", wcs->cdelt[0]);
+        result.set("scaleY", wcs->cdelt[1]);
+        
+        // wcs->cunit contains the unit strings (usually "deg")
+        result.set("unitX", val(std::string(wcs->cunit[0])));
+        result.set("unitY", val(std::string(wcs->cunit[1])));
+
+        return result;
+    }
 };
 
 EMSCRIPTEN_BINDINGS(fits_module) {
@@ -563,6 +578,7 @@ EMSCRIPTEN_BINDINGS(fits_module) {
         .function("initWCS", &FitsWrapper::initWCS)
         .function("pixToWorld", &FitsWrapper::pixToWorld)
         .function("worldToPix", &FitsWrapper::worldToPix)
+        .function("getPixelScale", &FitsWrapper::getPixelScale)
         .function("getColumnInfo", &FitsWrapper::getColumnInfo)
         .function("writeCellDouble", &FitsWrapper::writeCellDouble)
         .function("insertRows", &FitsWrapper::insertRows)
