@@ -498,7 +498,7 @@ public:
         int nkeyrec = header.length() / 81; 
         
         // Let WCSLIB parse the raw header string into its powerful structs!
-        int wcs_status = wcspih((char*)header.c_str(), nkeyrec, WCSHDR_all, 2, &nreject, &nwcs, &wcs);
+        int wcs_status = wcspih((char*)header.c_str(), nkeyrec, WCSHDR_all, 0, &nreject, &nwcs, &wcs);
         
         // status 0 means success
         return wcs_status == 0 && nwcs > 0;
