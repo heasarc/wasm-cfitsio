@@ -69,7 +69,7 @@ export class FitsFile {
     } | null;
 
     /** Writes a single numeric value to a specific cell in the FITS table. */
-    writeCell(colNum: number, rowNum: number, value: number): number;
+    writeCell(colNum: number, rowNum: number, value: number, firstElem: number): number;
 
     /** Inserts empty rows into the current table HDU. (1-indexed) */
     insertRows(firstRow: number, numRows?: number): number;
