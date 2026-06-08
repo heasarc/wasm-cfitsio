@@ -159,14 +159,31 @@ export class FitsFile {
             case "BigInt64Array": safeData = new BigInt64Array(result.data.slice()); break;
             case "Float32Array": safeData = new Float32Array(result.data.slice()); break;
             case "Float64Array": safeData = new Float64Array(result.data.slice()); break;
-            case "StringArray": safeData = result.data; break;
+            case "StringArray": safeData = result.data; break; // Strings already arrive as a JS Array of strings
             default: safeData = new Float64Array(result.data.slice());
+        }
+
+        // Unify Fixed-Length Vectors (repeat > 1) and Variable-Length Arrays (VLAs)
+        if ((result.isVLA || result.repeat > 1) && result.dataType !== "StringArray") {
+            const rowArrays = [];
+            let currentOffset = 0;
+            
+            // Determine how many rows we have
+            const calculatedNumRows = result.isVLA ? result.vlaLengths.length : (safeData.length / result.repeat);
+            
+            for (let i = 0; i < calculatedNumRows; i++) {
+                const len = result.isVLA ? result.vlaLengths[i] : result.repeat;
+                rowArrays.push(safeData.subarray(currentOffset, currentOffset + len));
+                currentOffset += len;
+            }
+            safeData = rowArrays;
         }
 
         return {
             typecode: result.typecode,
             dataType: result.dataType,
             repeat: result.repeat,
+            isVLA: result.isVLA,
             data: safeData
         };
     }

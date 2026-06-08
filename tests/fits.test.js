@@ -116,6 +116,46 @@ describe('FitsFile WASM Library', () => {
         });
     });
 
+    describe('Variable Length Arrays (VLAs)', () => {
+
+        it('should slice Variable Length Arrays (VLAs) into an Array of TypedArrays', async () => {
+            const fileData = loadFixture('vla_table.fits');
+            const fits = await FitsFile.open(fileData);
+
+            fits.moveToHDU(2); 
+            const colData = fits.readColumn(2); // VLA_INT (PJ)
+            
+            expect(colData.isVLA).toBe(true);
+            expect(Array.isArray(colData.data)).toBe(true);
+            expect(colData.data.length).toBe(3); 
+            
+            expect(colData.data[1].length).toBe(3);
+            expect(colData.data[1][0]).toBe(20);
+            expect(colData.data[2].length).toBe(0); // Empty row
+        });
+
+        it('should slice Fixed-Length Vectors (repeat > 1) into an Array of TypedArrays', async () => {
+            const fileData = loadFixture('vla_table.fits');
+            const fits = await FitsFile.open(fileData);
+
+            fits.moveToHDU(2);
+            const colData = fits.readColumn(3); // FIXED_FLOAT (3D)
+            
+            expect(colData.isVLA).toBe(false);
+            expect(colData.repeat).toBe(3);
+            expect(Array.isArray(colData.data)).toBe(true);
+            expect(colData.data.length).toBe(3); // 3 rows
+            
+            // Every row must have exactly 3 elements
+            expect(colData.data[0]).toBeInstanceOf(Float64Array);
+            expect(colData.data[0].length).toBe(3);
+            expect(colData.data[0][0]).toBeCloseTo(1.1);
+            
+            expect(colData.data[2].length).toBe(3);
+            expect(colData.data[2][2]).toBeCloseTo(3.3);
+        });
+    });
+
     describe('ASCII Tables (ascii.fits)', () => {
         it('should transparently parse ASCII table columns', async () => {
             const fileData = loadFixture('ascii.fits');

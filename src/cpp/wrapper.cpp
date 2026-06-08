@@ -389,7 +389,7 @@ public:
         int local_status = 0;
 
         fits_get_coltype(fptr, colnum, &typecode, &repeat, &width, &local_status);
-        if (local_status || typecode < 0) return val::null();
+        if (local_status) return val::null();
 
         long total_rows = 0;
         fits_get_num_rows(fptr, &total_rows, &local_status);
@@ -405,64 +405,69 @@ public:
         
         if (numrows <= 0) return val::null(); // Nothing to read
 
+        bool is_vla = (typecode < 0);
         int abs_type = std::abs(typecode);
-        long num_elements = (abs_type == TSTRING) ? numrows : numrows * repeat;
+        
+        long total_elements = 0;
+        val js_vla_lengths = val::null();
+        std::vector<long> vla_lengths;
+
+        // 1. Calculate required memory
+        if (is_vla) {
+            vla_lengths.resize(numrows);
+            val lengths_arr = val::array();
+            for (long r = 0; r < numrows; r++) {
+                long row_repeat = 0;
+                long offset = 0;
+                fits_read_descript(fptr, colnum, firstrow + r, &row_repeat, &offset, &local_status);
+                vla_lengths[r] = row_repeat;
+                total_elements += row_repeat;
+                lengths_arr.set(r, val(row_repeat));
+            }
+            js_vla_lengths = lengths_arr;
+        } else {
+            total_elements = (abs_type == TSTRING) ? numrows : numrows * repeat;
+        }
 
         int anynul = 0;
         clearDataVectors();
         val result = val::object();
 
-        // Notice we now pass `firstrow` into the fits_read_col commands instead of `1`
+        // Helper macro to read data (handles both VLA and Fixed-Length)
+        #define READ_DATA(CFITS_TYPE, VEC, T_ARRAY_STR) \
+            VEC.resize(total_elements); \
+            if (is_vla) { \
+                long current_offset = 0; \
+                for (long r = 0; r < numrows; r++) { \
+                    long rlen = vla_lengths[r]; \
+                    if (rlen > 0) { \
+                        fits_read_col(fptr, CFITS_TYPE, colnum, firstrow + r, 1, rlen, NULL, VEC.data() + current_offset, &anynul, &status); \
+                        current_offset += rlen; \
+                    } \
+                } \
+            } else { \
+                fits_read_col(fptr, CFITS_TYPE, colnum, firstrow, 1, total_elements, NULL, VEC.data(), &anynul, &status); \
+            } \
+            result.set("dataType", val(T_ARRAY_STR)); \
+            result.set("data", val(typed_memory_view(VEC.size(), VEC.data())));
+
         switch(abs_type) {
             case TBYTE:
-            case TLOGICAL:
-                img8.resize(num_elements);
-                fits_read_col(fptr, TBYTE, colnum, firstrow, 1, num_elements, NULL, img8.data(), &anynul, &status);
-                result.set("dataType", val("Uint8Array"));
-                result.set("data", val(typed_memory_view(img8.size(), img8.data())));
-                break;
-            case TSHORT:
-                img16.resize(num_elements);
-                fits_read_col(fptr, TSHORT, colnum, firstrow, 1, num_elements, NULL, img16.data(), &anynul, &status);
-                result.set("dataType", val("Int16Array"));
-                result.set("data", val(typed_memory_view(img16.size(), img16.data())));
-                break;
+            case TLOGICAL: READ_DATA(TBYTE, img8, "Uint8Array"); break;
+            case TSHORT:   READ_DATA(TSHORT, img16, "Int16Array"); break;
             case TINT:
-            case TLONG:
-                img32.resize(num_elements);
-                fits_read_col(fptr, TINT, colnum, firstrow, 1, num_elements, NULL, img32.data(), &anynul, &status);
-                result.set("dataType", val("Int32Array"));
-                result.set("data", val(typed_memory_view(img32.size(), img32.data())));
-                break;
-            case TLONGLONG:
-                img64.resize(num_elements);
-                fits_read_col(fptr, TLONGLONG, colnum, firstrow, 1, num_elements, NULL, img64.data(), &anynul, &status);
-                result.set("dataType", val("BigInt64Array"));
-                result.set("data", val(typed_memory_view(img64.size(), img64.data())));
-                break;
-            case TFLOAT:
-                imgF32.resize(num_elements);
-                fits_read_col(fptr, TFLOAT, colnum, firstrow, 1, num_elements, NULL, imgF32.data(), &anynul, &status);
-                result.set("dataType", val("Float32Array"));
-                result.set("data", val(typed_memory_view(imgF32.size(), imgF32.data())));
-                break;
-            case TDOUBLE:
-                imgF64.resize(num_elements);
-                fits_read_col(fptr, TDOUBLE, colnum, firstrow, 1, num_elements, NULL, imgF64.data(), &anynul, &status);
-                result.set("dataType", val("Float64Array"));
-                result.set("data", val(typed_memory_view(imgF64.size(), imgF64.data())));
-                break;
+            case TLONG:    READ_DATA(TINT, img32, "Int32Array"); break;
+            case TLONGLONG:READ_DATA(TLONGLONG, img64, "BigInt64Array"); break;
+            case TFLOAT:   READ_DATA(TFLOAT, imgF32, "Float32Array"); break;
+            case TDOUBLE:  READ_DATA(TDOUBLE, imgF64, "Float64Array"); break;
             case TSTRING: {
+                // Strings don't typically use the VLA heap in the same way, but handle standard fixed string columns
                 long max_len = width + 1;
                 std::vector<char*> str_ptrs(numrows);
                 std::vector<char>  str_buffer(numrows * max_len);
-
-                for (long i = 0; i < numrows; ++i) {
-                    str_ptrs[i] = &str_buffer[i * max_len];
-                }
-
-                fits_read_col(fptr, TSTRING, colnum, firstrow, 1, numrows, NULL,
-                            str_ptrs.data(), &anynul, &local_status);
+                for (long i = 0; i < numrows; ++i) str_ptrs[i] = &str_buffer[i * max_len];
+                
+                fits_read_col(fptr, TSTRING, colnum, firstrow, 1, numrows, NULL, str_ptrs.data(), &anynul, &local_status);
                 if (local_status) return val::null();
 
                 val jsArray = val::array();
@@ -471,7 +476,7 @@ public:
                     s.erase(s.find_last_not_of(" ") + 1);
                     jsArray.set(i, val(s));
                 }
-
+                
                 result.set("dataType", val("StringArray"));
                 result.set("data", jsArray);
                 break;
@@ -480,10 +485,13 @@ public:
                 return val::null();
         }
 
-        if (local_status) return val::null();
+        if (status) return val::null();
         
         result.set("typecode", val(typecode));
         result.set("repeat", val(repeat));
+        result.set("isVLA", val(is_vla));
+        if (is_vla) result.set("vlaLengths", js_vla_lengths);
+        
         return result;
     }
 
