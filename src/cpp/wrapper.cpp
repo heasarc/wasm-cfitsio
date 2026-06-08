@@ -452,6 +452,7 @@ public:
             result.set("data", val(typed_memory_view(VEC.size(), VEC.data())));
 
         switch(abs_type) {
+            case TBIT:     READ_DATA(TBIT, img8, "Uint8Array"); break;
             case TBYTE:
             case TLOGICAL: READ_DATA(TBYTE, img8, "Uint8Array"); break;
             case TSHORT:   READ_DATA(TSHORT, img16, "Int16Array"); break;
