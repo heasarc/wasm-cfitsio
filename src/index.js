@@ -104,8 +104,8 @@ export class FitsFile {
      * @param {number} rowNum - The 1-indexed row number
      * @param {number} value - The numeric value to write
      */
-    writeCell(colNum, rowNum, value) {
-        const status = this.fits.writeCellDouble(colNum, rowNum, Number(value));
+    writeCell(colNum, rowNum, value, firstElem = 1) {
+        const status = this.fits.writeCellDouble(colNum, rowNum, firstElem, Number(value));
         if (status !== 0) {
             throw new Error(`Failed to write cell. Status: ${status}`);
         }

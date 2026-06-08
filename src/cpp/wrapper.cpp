@@ -296,11 +296,11 @@ public:
     }
 
     // Write a single numeric value to a specific cell
-    int writeCellDouble(int colnum, long rownum, double value) {
+    int writeCellDouble(int colnum, long rownum, long firstelem, double value) {
         if (status || fptr == nullptr) return status;
         
         double array[1] = {value};
-        fits_write_col(fptr, TDOUBLE, colnum, rownum, 1, 1, array, &status);
+        fits_write_col(fptr, TDOUBLE, colnum, rownum, firstelem, 1, array, &status);
         
         return status;
     }
@@ -476,7 +476,7 @@ public:
                     s.erase(s.find_last_not_of(" ") + 1);
                     jsArray.set(i, val(s));
                 }
-                
+
                 result.set("dataType", val("StringArray"));
                 result.set("data", jsArray);
                 break;
