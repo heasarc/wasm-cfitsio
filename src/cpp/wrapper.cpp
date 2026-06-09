@@ -162,64 +162,94 @@ public:
         return formatted_header;
     }
 
-    val readImage() {
+    val readImage(val fpixel_js, val lpixel_js, val inc_js) {
         if (status || fptr == nullptr) return val::null();
 
         int naxis = 0;
         int bitpix = 0;
         
-        // Get number of axes and BITPIX type
         fits_get_img_param(fptr, 9, &bitpix, &naxis, NULL, &status);
         if (status || naxis == 0) return val::null();
 
-        // Get actual dimensions
-        std::vector<long> naxes(naxis);
-        fits_get_img_size(fptr, naxis, naxes.data(), &status);
+        // Get actual dimensions of the FITS file
+        std::vector<long> actual_naxes(naxis);
+        fits_get_img_size(fptr, naxis, actual_naxes.data(), &status);
+
+        // Prepare arrays for fits_read_subset
+        std::vector<long> fpixel(naxis, 1);
+        std::vector<long> lpixel(naxis, 1);
+        std::vector<long> inc(naxis, 1);
 
         long num_pixels = 1;
-        for(int i = 0; i < naxis; i++) num_pixels *= naxes[i];
+        val js_naxes = val::array(); // To pass the dimensions back to JS
+
+        // Safely parse the JS arrays and clamp them to the actual image bounds
+        for(int i = 0; i < naxis; i++) {
+            // Read from JS arrays if provided, otherwise default to full axis
+            if (!fpixel_js.isUndefined() && !fpixel_js.isNull() && fpixel_js["length"].as<int>() > i) {
+                fpixel[i] = fpixel_js[i].as<long>();
+            }
+            if (!lpixel_js.isUndefined() && !lpixel_js.isNull() && lpixel_js["length"].as<int>() > i) {
+                lpixel[i] = lpixel_js[i].as<long>();
+            } else {
+                lpixel[i] = actual_naxes[i]; // Default to max size of this axis
+            }
+            if (!inc_js.isUndefined() && !inc_js.isNull() && inc_js["length"].as<int>() > i) {
+                inc[i] = inc_js[i].as<long>();
+            }
+
+            // Safety clamps (cfitsio is 1-indexed)
+            if (fpixel[i] < 1) fpixel[i] = 1;
+            if (lpixel[i] > actual_naxes[i]) lpixel[i] = actual_naxes[i];
+            if (inc[i] < 1) inc[i] = 1;
+
+            // Calculate how many pixels we are actually extracting on this axis
+            long axis_len = ((lpixel[i] - fpixel[i]) / inc[i]) + 1;
+            num_pixels *= axis_len;
+            
+            // Store the full, original dimensions to send back to JS
+            js_naxes.set(i, actual_naxes[i]);
+        }
 
         clearImageVectors();
-        
         int anynul = 0;
-        std::vector<long> fpixel(naxis, 1); // FITS starts at coordinates 1,1,1...
-        val result = val::object();         // We will return a JS object
+        val result = val::object();
 
-        // Switch based on BITPIX to use the exact data type
+        // Use fits_read_subset instead of fits_read_pix
         switch(bitpix) {
-            case BYTE_IMG: // 8
+            case BYTE_IMG:
                 img8.resize(num_pixels);
-                fits_read_pix(fptr, TBYTE, fpixel.data(), num_pixels, NULL, img8.data(), &anynul, &status);
+                fits_read_subset(fptr, TBYTE, fpixel.data(), lpixel.data(), inc.data(), NULL, img8.data(), &anynul, &status);
                 result.set("dataType", val("Uint8Array"));
                 result.set("data", val(typed_memory_view(img8.size(), img8.data())));
                 break;
-            case SHORT_IMG: // 16
+            case SHORT_IMG:
                 img16.resize(num_pixels);
-                fits_read_pix(fptr, TSHORT, fpixel.data(), num_pixels, NULL, img16.data(), &anynul, &status);
+                fits_read_subset(fptr, TSHORT, fpixel.data(), lpixel.data(), inc.data(), NULL, img16.data(), &anynul, &status);
                 result.set("dataType", val("Int16Array"));
                 result.set("data", val(typed_memory_view(img16.size(), img16.data())));
                 break;
-            case LONG_IMG: // 32
+            case LONG_IMG:
                 img32.resize(num_pixels);
-                fits_read_pix(fptr, TINT, fpixel.data(), num_pixels, NULL, img32.data(), &anynul, &status);
+                fits_read_subset(fptr, TINT, fpixel.data(), lpixel.data(), inc.data(), NULL, img32.data(), &anynul, &status);
                 result.set("dataType", val("Int32Array"));
                 result.set("data", val(typed_memory_view(img32.size(), img32.data())));
                 break;
-            case LONGLONG_IMG: // 64
+            case LONGLONG_IMG:
                 img64.resize(num_pixels);
-                fits_read_pix(fptr, TLONGLONG, fpixel.data(), num_pixels, NULL, img64.data(), &anynul, &status);
+                fits_read_subset(fptr, TLONGLONG, fpixel.data(), lpixel.data(), inc.data(), NULL, img64.data(), &anynul, &status);
                 result.set("dataType", val("BigInt64Array"));
                 result.set("data", val(typed_memory_view(img64.size(), img64.data())));
                 break;
-            case FLOAT_IMG: // -32
+            case FLOAT_IMG:
                 imgF32.resize(num_pixels);
-                fits_read_pix(fptr, TFLOAT, fpixel.data(), num_pixels, NULL, imgF32.data(), &anynul, &status);
+                fits_read_subset(fptr, TFLOAT, fpixel.data(), lpixel.data(), inc.data(), NULL, imgF32.data(), &anynul, &status);
                 result.set("dataType", val("Float32Array"));
                 result.set("data", val(typed_memory_view(imgF32.size(), imgF32.data())));
                 break;
-            case DOUBLE_IMG: // -64
+            case DOUBLE_IMG:
                 imgF64.resize(num_pixels);
-                fits_read_pix(fptr, TDOUBLE, fpixel.data(), num_pixels, NULL, imgF64.data(), &anynul, &status);
+                fits_read_subset(fptr, TDOUBLE, fpixel.data(), lpixel.data(), inc.data(), NULL, imgF64.data(), &anynul, &status);
                 result.set("dataType", val("Float64Array"));
                 result.set("data", val(typed_memory_view(imgF64.size(), imgF64.data())));
                 break;
@@ -228,7 +258,16 @@ public:
         }
 
         if (status) return val::null();
-        result.set("bitpix", val(bitpix)); // Pass the original BITPIX back to JS
+        
+        result.set("bitpix", val(bitpix));
+        result.set("naxes", js_naxes); // Pass the original hypercube size back
+        
+        // Calculate the physical subset width/height for the Canvas
+        long out_width = ((lpixel[0] - fpixel[0]) / inc[0]) + 1;
+        long out_height = naxis > 1 ? ((lpixel[1] - fpixel[1]) / inc[1]) + 1 : 1;
+        result.set("subsetWidth", val(out_width));
+        result.set("subsetHeight", val(out_height));
+
         return result;
     }
 

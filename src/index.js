@@ -47,8 +47,16 @@ export class FitsFile {
     worldToPix(ra, dec) { return this.fits.worldToPix(Number(ra), Number(dec)); }
     getPixelScale() { return this.fits.getPixelScale() ?? null; }
     
-    readImage() { 
-        const result = this.fits.readImage();
+    /**
+     * Reads an image or a subset/slice of an image. 
+     * If no params are provided, reads the entire image at 1:1 scale.
+     * @param {number[]|null} fpixel - 1-indexed start coordinates [x, y, z...]
+     * @param {number[]|null} lpixel - 1-indexed end coordinates [x, y, z...]
+     * @param {number[]|null} inc - step size [x, y, z...]
+     */
+    readImage(fpixel = null, lpixel = null, inc = null) { 
+        // Pass the arguments down to C++ (Emscripten will see 3 arguments)
+        const result = this.fits.readImage(fpixel, lpixel, inc);
         if (!result || !result.data) return null;
         
         // We slice() it to copy it out of WASM memory before it gets freed,
@@ -69,7 +77,10 @@ export class FitsFile {
             bitpix: result.bitpix,
             dataType: result.dataType,
             data: safeData,
-            pixScale: pixScale
+            pixScale: pixScale,
+            naxes: result.naxes,             // The full size of the hypercube
+            subsetWidth: result.subsetWidth, // The width of the extracted slice
+            subsetHeight: result.subsetHeight// The height of the extracted slice
         };
     }
 

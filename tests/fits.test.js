@@ -951,3 +951,111 @@ describe('File Writing and Export Integrity (Phase 6)', () => {
             }
         });
     });
+
+describe('FITS Image Reading (Multi-dimensional & Subsets)', () => {
+
+    it('should read the full 2D image when no subset parameters are provided', async () => {
+        
+        const fileData = loadFixture('test.fits');
+        const fits = await FitsFile.open(fileData);
+        fits.moveToHDU(2);
+        const img = fits.readImage();
+        
+        expect(img).toBeDefined();
+        expect(img.naxes.length).toBeGreaterThanOrEqual(2);
+        
+        const [width, height] = img.naxes;
+        
+        // Subset dimensions should match the full image dimensions
+        expect(img.subsetWidth).toBe(width);
+        expect(img.subsetHeight).toBe(height);
+        expect(img.data.length).toBe(width * height);
+        
+        fits.close();
+    });
+
+    it('should extract a cropped subset of a 2D image', async () => {
+        const fileData = loadFixture('test.fits');
+        const fits = await FitsFile.open(fileData);
+        fits.moveToHDU(2);
+        
+        // Extract a 10x10 box from coordinates (5, 5) to (14, 14) 
+        // Remember: cfitsio coordinates are 1-indexed!
+        const fpixel = [5, 5];
+        const lpixel = [14, 14];
+        
+        const img = fits.readImage(fpixel, lpixel);
+        
+        expect(img.subsetWidth).toBe(10);  // (14 - 5) / 1 + 1 = 10
+        expect(img.subsetHeight).toBe(10); // (14 - 5) / 1 + 1 = 10
+        expect(img.data.length).toBe(100);
+        
+        fits.close();
+    });
+
+    it('should apply the inc (stride) parameter correctly', async () => {
+        const fileData = loadFixture('test.fits');
+        const fits = await FitsFile.open(fileData);
+        fits.moveToHDU(2);
+        
+        // Extract a 10x10 box but stride by 2 in both directions
+        const fpixel = [1, 1];
+        const lpixel = [10, 10];
+        const inc = [2, 2];
+        
+        const img = fits.readImage(fpixel, lpixel, inc);
+        
+        // With stride 2: pixels 1, 3, 5, 7, 9 = 5 pixels per axis
+        expect(img.subsetWidth).toBe(5);
+        expect(img.subsetHeight).toBe(5);
+        expect(img.data.length).toBe(25);
+        
+        fits.close();
+    });
+
+    it('should extract a single 2D slice from a 3D datacube', async () => {
+        const fileData = loadFixture('cube.fits');
+        const cubeFits = await FitsFile.open(fileData);
+        cubeFits.moveToHDU(2);
+
+        const [width, height, depth] = cubeFits.readImage().naxes; // Get full dims
+        
+        // We want the entire spatial extent, but ONLY the 3rd spectral slice
+        const fpixel = [1, 1, 3];
+        const lpixel = [width, height, 3];
+        
+        const slice = cubeFits.readImage(fpixel, lpixel);
+        
+        expect(slice.naxes.length).toBe(3);
+        expect(slice.subsetWidth).toBe(width);
+        expect(slice.subsetHeight).toBe(height);
+        
+        // The total data length should just be the size of ONE 2D plane
+        expect(slice.data.length).toBe(width * height);
+        
+        cubeFits.close();
+    });
+
+    it('should extract a 3D slice from a 3D datacube', async () => {
+        const fileData = loadFixture('cube.fits');
+        const cubeFits = await FitsFile.open(fileData);
+        cubeFits.moveToHDU(2);
+
+        const [width, height, depth] = cubeFits.readImage().naxes; // Get full dims
+        
+        // We want the entire spatial extent, but ONLY the 3rd spectral slice
+        const fpixel = [1, 1, 3];
+        const lpixel = [width, height, 4];
+        
+        const slice = cubeFits.readImage(fpixel, lpixel);
+        
+        expect(slice.naxes.length).toBe(3);
+        expect(slice.subsetWidth).toBe(width);
+        expect(slice.subsetHeight).toBe(height);
+        
+        // The total data length should be the size TWO 2D planes
+        expect(slice.data.length).toBe(width * height * 2);
+        
+        cubeFits.close();
+    });
+});

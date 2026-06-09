@@ -4,6 +4,10 @@ export interface ImageResult {
     bitpix: number;
     dataType: "Uint8Array" | "Int16Array" | "Int32Array" | "BigInt64Array" | "Float32Array" | "Float64Array";
     data: Uint8Array | Int16Array | Int32Array | BigInt64Array | Float32Array | Float64Array;
+    pixScale: PixelScale;
+    naxes: number[];
+    subsetWidth: number;
+    subsetHeight: number;
 }
 
 export interface ColumnResult {
@@ -49,8 +53,21 @@ export class FitsFile {
     /** Reads the entire header of the current HDU as a single string */
     readHeader(): string;
 
-    /** Extracts the 2D image data from the current HDU. Returns null if not an image. */
-    readImage(): ImageResult | null;
+    /**
+     * Reads the image data from the FITS file.
+     * Optionally reads a multi-dimensional subset of the image.
+     * 
+     * @param fpixel Array representing the starting pixel coordinate for each axis (1-indexed).
+     * @param lpixel Array representing the ending pixel coordinate for each axis (1-indexed).
+     * @param inc Array representing the stride/increment for each axis.
+     * @returns An object containing the typed array data and image dimensions, or null if reading fails.
+     */
+    readImage(
+        fpixel?: number[] | null, 
+        lpixel?: number[] | null, 
+        inc?: number[] | null
+    ): ImageResult | null;
+    
 
     /** Gets the total number of rows in the current BINTABLE HDU */
     getNumRows(): number;
