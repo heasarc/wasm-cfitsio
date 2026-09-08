@@ -26,6 +26,7 @@ private:
     struct wcsprm* wcs;
     int nreject;
     int nwcs;
+    int activeWcsIndex;
 
     // Helper to free memory before reading a new image
     void clearImageVectors() {
@@ -61,6 +62,7 @@ public:
         status = 0;
         wcs = nullptr;
         nwcs = 0;
+        activeWcsIndex = 0;
         fits_open_file(&fptr, filename.c_str(), READWRITE, &status);
         if (status) {
             std::cerr << "Error opening FITS file: " << filename << " (Status: " << status << ")" << std::endl;
@@ -569,9 +571,22 @@ public:
         return wcs_status == 0 && nwcs > 0;
     }
 
+    int getWCSCount() {
+        if (wcs == nullptr && !initWCS()) return 0;
+        return nwcs;
+    }
+
+    bool setActiveWCS(int index) {
+        if (wcs == nullptr && !initWCS()) return false;
+        if (index < 0 || index >= nwcs) return false;
+        activeWcsIndex = index;
+        return true;
+    }
+
     // 2. Convert Pixel (X, Y) to Sky (RA, Dec)
     val pixToWorld(double xpix, double ypix) {
         if (wcs == nullptr && !initWCS()) return val::null();
+        struct wcsprm* active = &wcs[activeWcsIndex];
 
         double pixcrd[2] = {xpix, ypix};
         double imgcrd[2];
@@ -579,8 +594,7 @@ public:
         double world[2];
         int stat[1];
 
-        // wcss2p is the core mathematical engine for Sky to Pixel
-        int status = wcsp2s(wcs, 1, 2, pixcrd, imgcrd, phi, theta, world, stat);
+        int status = wcsp2s(active, 1, 2, pixcrd, imgcrd, phi, theta, world, stat);
         if (status) return val::null();
 
         val result = val::object();
@@ -592,6 +606,7 @@ public:
     // 3. Convert Sky (RA, Dec) to Pixel (X, Y)
     val worldToPix(double ra, double dec) {
         if (wcs == nullptr && !initWCS()) return val::null();
+        struct wcsprm* active = &wcs[activeWcsIndex];
 
         double world[2] = {ra, dec};
         double phi[1], theta[1];
@@ -599,8 +614,7 @@ public:
         double pixcrd[2];
         int stat[1];
 
-        // wcsp2s is the core mathematical engine for Pixel to Sky
-        int status = wcss2p(wcs, 1, 2, world, phi, theta, imgcrd, pixcrd, stat);
+        int status = wcss2p(active, 1, 2, world, phi, theta, imgcrd, pixcrd, stat);
         if (status) return val::null();
 
         val result = val::object();
@@ -611,15 +625,13 @@ public:
     // 4. Get the WCS Pixel Scale
     val getPixelScale() {
         if (wcs == nullptr && !initWCS()) return val::null();
+        struct wcsprm* active = &wcs[activeWcsIndex];
 
         val result = val::object();
-        // wcs->cdelt contains the parsed coordinate increments (scale)
-        result.set("scaleX", wcs->cdelt[0]);
-        result.set("scaleY", wcs->cdelt[1]);
-        
-        // wcs->cunit contains the unit strings (usually "deg")
-        result.set("unitX", val(std::string(wcs->cunit[0])));
-        result.set("unitY", val(std::string(wcs->cunit[1])));
+        result.set("scaleX", active->cdelt[0]);
+        result.set("scaleY", active->cdelt[1]);
+        result.set("unitX", val(std::string(active->cunit[0])));
+        result.set("unitY", val(std::string(active->cunit[1])));
 
         return result;
     }
@@ -641,6 +653,8 @@ EMSCRIPTEN_BINDINGS(fits_module) {
         .function("updateKeyString", &FitsWrapper::updateKeyString)
         .function("updateKeyDouble", &FitsWrapper::updateKeyDouble)
         .function("initWCS", &FitsWrapper::initWCS)
+        .function("getWCSCount", &FitsWrapper::getWCSCount)
+        .function("setActiveWCS", &FitsWrapper::setActiveWCS)
         .function("pixToWorld", &FitsWrapper::pixToWorld)
         .function("worldToPix", &FitsWrapper::worldToPix)
         .function("getPixelScale", &FitsWrapper::getPixelScale)
