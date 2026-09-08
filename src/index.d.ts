@@ -10,6 +10,11 @@ export interface ImageResult {
     subsetHeight: number;
 }
 
+/**
+ * TCOMPLEX columns return Float32Array with interleaved (real, imag) pairs.
+ * TDBLCOMPLEX columns return Float64Array with interleaved (real, imag) pairs.
+ * Unsigned integer columns are promoted: TSBYTE->Int16, TUSHORT->Int32, TULONG->BigInt64, TULONGLONG->Float64.
+ */
 export interface ColumnResult {
     typecode: number;
     dataType: "Uint8Array" | "Int16Array" | "Int32Array" | "BigInt64Array" | "Float32Array" | "Float64Array" | "StringArray";

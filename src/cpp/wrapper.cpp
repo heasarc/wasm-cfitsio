@@ -494,12 +494,22 @@ public:
             case TBIT:     READ_DATA(TBIT, img8, "Uint8Array"); break;
             case TBYTE:
             case TLOGICAL: READ_DATA(TBYTE, img8, "Uint8Array"); break;
+            case TSBYTE:   READ_DATA(TSHORT, img16, "Int16Array"); break;
             case TSHORT:   READ_DATA(TSHORT, img16, "Int16Array"); break;
+            case TUSHORT:  READ_DATA(TINT, img32, "Int32Array"); break;
             case TINT:
             case TLONG:    READ_DATA(TINT, img32, "Int32Array"); break;
+            case TULONG:   READ_DATA(TLONGLONG, img64, "BigInt64Array"); break;
             case TLONGLONG:READ_DATA(TLONGLONG, img64, "BigInt64Array"); break;
+            case TULONGLONG: READ_DATA(TDOUBLE, imgF64, "Float64Array"); break;
             case TFLOAT:   READ_DATA(TFLOAT, imgF32, "Float32Array"); break;
             case TDOUBLE:  READ_DATA(TDOUBLE, imgF64, "Float64Array"); break;
+            case TCOMPLEX:
+                total_elements *= 2;
+                READ_DATA(TFLOAT, imgF32, "Float32Array"); break;
+            case TDBLCOMPLEX:
+                total_elements *= 2;
+                READ_DATA(TDOUBLE, imgF64, "Float64Array"); break;
             case TSTRING: {
                 // Strings don't typically use the VLA heap in the same way, but handle standard fixed string columns
                 long max_len = width + 1;
