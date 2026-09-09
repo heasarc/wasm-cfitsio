@@ -622,6 +622,17 @@ public:
         result.set("y", pixcrd[1]);
         return result;
     }
+    val verifyChecksum() {
+        if (fptr == nullptr) return val::null();
+        int dataok = 0, hduok = 0;
+        int local_status = 0;
+        fits_verify_chksum(fptr, &dataok, &hduok, &local_status);
+        val result = val::object();
+        result.set("dataOk", dataok);
+        result.set("headerOk", hduok);
+        return result;
+    }
+
     // 4. Get the WCS Pixel Scale
     val getPixelScale() {
         if (wcs == nullptr && !initWCS()) return val::null();
@@ -658,6 +669,7 @@ EMSCRIPTEN_BINDINGS(fits_module) {
         .function("pixToWorld", &FitsWrapper::pixToWorld)
         .function("worldToPix", &FitsWrapper::worldToPix)
         .function("getPixelScale", &FitsWrapper::getPixelScale)
+        .function("verifyChecksum", &FitsWrapper::verifyChecksum)
         .function("getColumnInfo", &FitsWrapper::getColumnInfo)
         .function("writeCellDouble", &FitsWrapper::writeCellDouble)
         .function("insertRows", &FitsWrapper::insertRows)

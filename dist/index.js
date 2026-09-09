@@ -48,6 +48,11 @@ export class FitsFile {
     pixToWorld(x, y) { return this.fits.pixToWorld(Number(x), Number(y)); }
     worldToPix(ra, dec) { return this.fits.worldToPix(Number(ra), Number(dec)); }
     getPixelScale() { return this.fits.getPixelScale() ?? null; }
+    verifyChecksum() {
+        const result = this.fits.verifyChecksum();
+        if (!result) return null;
+        return { dataOk: result.dataOk, headerOk: result.headerOk };
+    }
     
     /**
      * Reads an image or a subset/slice of an image. 

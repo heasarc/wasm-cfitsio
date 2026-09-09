@@ -152,6 +152,10 @@ export class FitsFile {
     /** Gets the WCS pixel scale (coordinate deltas) and physical units */
     getPixelScale(): PixelScale | null;
 
+    /** Verifies CHECKSUM and DATASUM keywords against actual data. Returns null if no file open.
+     *  dataOk/headerOk: 1=verified, 0=keyword not present, -1=verification failed */
+    verifyChecksum(): { dataOk: number; headerOk: number } | null;
+
     /** Flushes any modifications to memory and returns the updated FITS file bytes */
     save(): Uint8Array;
 
