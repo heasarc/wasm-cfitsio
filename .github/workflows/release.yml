@@ -21,6 +21,9 @@ jobs:
 
       - uses: mymindstorm/setup-emsdk@v15
 
+      - name: Pre-build Emscripten zlib port
+        run: embuilder build zlib
+
       - name: Install dependencies
         run: npm install
 
