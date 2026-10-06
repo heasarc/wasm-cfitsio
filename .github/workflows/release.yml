@@ -21,8 +21,12 @@ jobs:
 
       - uses: mymindstorm/setup-emsdk@v15
 
-      - name: Pre-build Emscripten zlib port
-        run: embuilder build zlib
+      - name: Warm up Emscripten cache (zlib port, libc++)
+        run: |
+          unset EM_FROZEN_CACHE
+          emcc --version
+          printf '#include <vector>\nint main(){std::vector<int> v(3);return v[0];}\n' > /tmp/warm.cpp
+          em++ /tmp/warm.cpp -s USE_ZLIB=1 -o /tmp/warm.js
 
       - name: Install dependencies
         run: npm install
