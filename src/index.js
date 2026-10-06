@@ -43,9 +43,16 @@ export class FitsFile {
     readHeader() { return this.fits.readHeader(); }
 
     hasWCS() { return this.fits.initWCS(); }
+    getWCSCount() { return this.fits.getWCSCount(); }
+    setActiveWCS(index) { return this.fits.setActiveWCS(index); }
     pixToWorld(x, y) { return this.fits.pixToWorld(Number(x), Number(y)); }
     worldToPix(ra, dec) { return this.fits.worldToPix(Number(ra), Number(dec)); }
     getPixelScale() { return this.fits.getPixelScale() ?? null; }
+    verifyChecksum() {
+        const result = this.fits.verifyChecksum();
+        if (!result) return null;
+        return { dataOk: result.dataOk, headerOk: result.headerOk };
+    }
     
     /**
      * Reads an image or a subset/slice of an image. 
