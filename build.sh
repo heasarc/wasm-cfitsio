@@ -81,7 +81,7 @@ fi
 echo "[4/4] Compiling JavaScript/WASM wrapper..."
 mkdir -p dist
 
-emcc src/cpp/wrapper.cpp "$LIBCFITSIO" "$LIBWCS" \
+em++ src/cpp/wrapper.cpp "$LIBCFITSIO" "$LIBWCS" \
   -o dist/fits.js \
   -I "$CFITSIO_DIR" \
   -I "$WCSLIB_DIR/C" -I "$WCSLIB_DIR" \
