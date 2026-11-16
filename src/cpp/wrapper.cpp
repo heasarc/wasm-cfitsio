@@ -561,11 +561,20 @@ public:
         std::string header = readHeader();
         if (header.empty()) return false;
 
-        // Count how many 80-char "cards" are in the header
-        int nkeyrec = header.length() / 81; 
+        // readHeader() adds newlines between cards for display. WCSLIB expects
+        // the original contiguous 80-byte FITS cards, so remove those line
+        // breaks before passing the header to wcspih().
+        std::string wcs_header;
+        wcs_header.reserve(header.length());
+        for (char c : header) {
+            if (c != '\n' && c != '\r') wcs_header += c;
+        }
+
+        // Count how many 80-char "cards" are in the header.
+        int nkeyrec = wcs_header.length() / 80;
         
         // Let WCSLIB parse the raw header string into its powerful structs!
-        int wcs_status = wcspih((char*)header.c_str(), nkeyrec, WCSHDR_all, 0, &nreject, &nwcs, &wcs);
+        int wcs_status = wcspih((char*)wcs_header.c_str(), nkeyrec, WCSHDR_all, 0, &nreject, &nwcs, &wcs);
         
         // status 0 means success
         return wcs_status == 0 && nwcs > 0;
